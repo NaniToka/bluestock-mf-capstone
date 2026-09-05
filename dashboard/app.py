@@ -114,21 +114,27 @@ def load_csv(name: str) -> pd.DataFrame:
 
 # ── Pre-load core tables ───────────────────────────────────────────────────────
 funds       = load("SELECT * FROM dim_fund")
-investors   = load("SELECT * FROM dim_investor")
+funds       = funds.rename(columns={"amfi_code": "fund_id", "fund_house": "amc"})
 nav_df      = load("SELECT * FROM fact_nav")
+nav_df      = nav_df.rename(columns={"amfi_code": "fund_id"})
 txn_df      = load("SELECT * FROM fact_transactions")
+txn_df      = txn_df.rename(columns={"transaction_date": "txn_date", "amfi_code": "fund_id", "transaction_type": "txn_type", "amount_inr": "amount"})
 aum_df      = load("SELECT * FROM fact_aum")
-sip_df      = load("SELECT * FROM fact_sip")
+aum_df      = aum_df.rename(columns={"date": "month", "aum_crore": "aum_cr", "fund_house": "amc"})
+sip_df      = load("SELECT * FROM fact_sip_inflows")
 perf_df     = load("SELECT * FROM fact_performance")
+perf_df     = perf_df.rename(columns={"amfi_code": "fund_id", "fund_house": "amc"})
 bm_df       = load("SELECT * FROM fact_benchmark")
 hold_df     = load("SELECT * FROM fact_holdings")
+hold_df     = hold_df.rename(columns={"amfi_code": "fund_id"})
 scorecard   = load_csv("fund_scorecard.csv")
 alpha_beta  = load_csv("alpha_beta.csv")
 
 nav_df["date"]     = pd.to_datetime(nav_df["date"])
 txn_df["txn_date"] = pd.to_datetime(txn_df["txn_date"])
 bm_df["date"]      = pd.to_datetime(bm_df["date"])
-aum_df["month_dt"] = pd.to_datetime(aum_df["month"] + "-01")
+aum_df["month"]    = pd.to_datetime(aum_df["month"])
+aum_df["month_dt"] = aum_df["month"]
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -166,7 +172,7 @@ if page == "🏠 Industry Overview":
     # ── KPI Cards ─────────────────────────────────────────────────────────────
     latest_month = aum_df["month"].max()
     total_aum    = aum_df[aum_df["month"] == latest_month]["aum_cr"].sum()
-    sip_inflows  = txn_df[txn_df["txn_type"] == "Sip"]["amount"].sum() / 1e7
+    sip_inflows  = txn_df[txn_df["txn_type"].str.upper() == "SIP"]["amount"].sum() / 1e7
     folio_count  = txn_df["folio_no"].nunique()
     scheme_count = funds["fund_id"].nunique()
 
@@ -181,9 +187,9 @@ if page == "🏠 Industry Overview":
         (c1, f"₹{total_aum:,.0f} Cr", "Total Industry AUM",
          f"▲ {aum_delta:.1f}% vs prev month", "💰"),
         (c2, f"₹{sip_inflows:,.1f} Cr", "Total SIP Inflows (all-time)",
-         f"{txn_df[txn_df.txn_type=='Sip'].shape[0]:,} SIP transactions", "📥"),
+         f"{txn_df[txn_df.txn_type.str.upper()=='SIP'].shape[0]:,} SIP transactions", "📥"),
         (c3, f"{folio_count:,}", "Active Folios",
-         f"{investors.shape[0]:,} registered investors", "📁"),
+         f"{txn_df['investor_id'].nunique():,} registered investors", "📁"),
         (c4, f"{scheme_count}", "Schemes Tracked",
          f"{funds['amc'].nunique()} fund houses", "🏦"),
     ]:
@@ -301,8 +307,8 @@ elif page == "📈 Fund Performance":
     # perf_df already has 'category' — only bring scheme_name and amc from funds
     perf_plot  = (perf_df[perf_df["year"] == latest_yr]
                   .merge(funds[["fund_id","scheme_name","amc"]], on="fund_id")
-                  .merge(aum_df[aum_df["month"] == aum_df["month"].max()][["fund_id","aum_cr"]],
-                         on="fund_id", how="left"))
+                  .merge(aum_df[aum_df["month"] == aum_df["month"].max()][["amc","aum_cr"]],
+                       on="amc", how="left"))
     perf_plot  = perf_plot[perf_plot["fund_id"].isin(filt_ids)]
 
     fig = px.scatter(
@@ -366,13 +372,13 @@ elif page == "📈 Fund Performance":
     # normalise to 100 at start
     fund_nav["idx"] = fund_nav["nav"] / fund_nav["nav"].iloc[0] * 100
 
-    bm_nifty50  = bm_df[bm_df["benchmark"] == "Nifty 100"][["date","index_value"]].copy()
+    bm_nifty50  = bm_df[bm_df["index_name"] == "NIFTY100"][["date","index_value"]].copy()
     bm_nifty50  = bm_nifty50.sort_values("date")
-    bm_nifty50["idx"] = bm_nifty50["index_value"] / bm_nifty50["index_value"].iloc[0] * 100
+    bm_nifty50["idx"] = bm_nifty50["close_value"] / bm_nifty50["close_value"].iloc[0] * 100
 
-    bm_nifty100 = bm_df[bm_df["benchmark"] == "Nifty 500"][["date","index_value"]].copy()
+    bm_nifty100 = bm_df[bm_df["index_name"] == "NIFTY500"][["date","index_value"]].copy()
     bm_nifty100 = bm_nifty100.sort_values("date")
-    bm_nifty100["idx"] = bm_nifty100["index_value"] / bm_nifty100["index_value"].iloc[0] * 100
+    bm_nifty100["idx"] = bm_nifty100["close_value"] / bm_nifty100["close_value"].iloc[0] * 100
 
     fname = funds.loc[funds.fund_id == sel_fund, "scheme_name"].values[0]
     fig_nav = go.Figure()
@@ -427,24 +433,15 @@ elif page == "👥 Investor Analytics":
         sel_cities = st.multiselect("City (top picks)", all_cities,
                                     default=all_cities[:10])
 
-        age_groups = ["18–30", "31–45", "46–60", "60+"]
+        age_groups = ["18-25", "26-35", "36-45", "46-55", "56+"]
         sel_age    = st.multiselect("Age Group", age_groups, default=age_groups)
 
-    # Age group labelling
-    def age_band(a):
-        if a <= 30:   return "18–30"
-        elif a <= 45: return "31–45"
-        elif a <= 60: return "46–60"
-        else:         return "60+"
-
-    inv_aug = investors.copy()
-    inv_aug["age_band"] = inv_aug["age"].apply(age_band)
-
-    txn_aug = txn_df.merge(inv_aug[["investor_id","age_band"]], on="investor_id", how="left")
+    txn_aug = txn_df.copy()
+    txn_aug["age_band"] = txn_aug["age_group"]
     txn_filt = txn_aug[
         txn_aug["city_tier"].isin(sel_tier) &
         txn_aug["city"].isin(sel_cities) &
-        txn_aug["age_band"].isin(sel_age)
+        txn_aug["age_group"].isin(sel_age)
     ]
 
     # ── Row 1 ─────────────────────────────────────────────────────────────────
@@ -498,7 +495,7 @@ elif page == "👥 Investor Analytics":
 
         fig3 = px.bar(sip_age, x="Age Group", y="Avg SIP (₹)",
                       color="Age Group",
-                      color_discrete_sequence=[BLUE, EMERALD, AMBER, ROSE],
+                      color_discrete_sequence=PALETTE[:len(age_groups)],
                       text="Avg SIP (₹)")
         fig3.update_traces(texttemplate="₹%{text:,.0f}", textposition="outside")
         fig3.update_layout(**PLOTLY_LAYOUT, height=360, showlegend=False,
@@ -552,15 +549,15 @@ elif page == "📅 SIP & Market Trends":
     st.markdown("<div class='section-header'>SIP Inflows vs Nifty 100 Index</div>",
                 unsafe_allow_html=True)
 
-    sip_monthly = (txn_df[txn_df["txn_type"] == "Sip"]
+    sip_monthly = (txn_df[txn_df["txn_type"].str.upper() == "SIP"]
                    .groupby("txn_month")["amount"].sum() / 1e7).reset_index()
     sip_monthly.columns = ["month", "sip_cr"]
     sip_monthly["month_dt"] = pd.to_datetime(sip_monthly["month"] + "-01")
     sip_monthly = sip_monthly.sort_values("month_dt")
 
-    nifty_monthly = (bm_df[bm_df["benchmark"] == "Nifty 100"]
+    nifty_monthly = (bm_df[bm_df["index_name"] == "NIFTY100"]
                      .assign(month=lambda d: d["date"].dt.to_period("M").astype(str))
-                     .groupby("month")["index_value"].last().reset_index())
+                     .groupby("month")["close_value"].last().reset_index())
     nifty_monthly["month_dt"] = pd.to_datetime(nifty_monthly["month"] + "-01")
     nifty_monthly = nifty_monthly.sort_values("month_dt")
 
@@ -574,7 +571,7 @@ elif page == "📅 SIP & Market Trends":
         hovertemplate="%{x|%b %Y}<br>SIP: ₹%{y:.1f} Cr<extra></extra>",
     ), secondary_y=False)
     fig.add_trace(go.Scatter(
-        x=merged["month_dt"], y=merged["index_value"],
+        x=merged["month_dt"], y=merged["close_value"],
         name="Nifty 100 Index",
         line=dict(color=EMERALD, width=2.5),
         hovertemplate="%{x|%b %Y}<br>Nifty 100: %{y:,.0f}<extra></extra>",
@@ -601,7 +598,7 @@ elif page == "📅 SIP & Market Trends":
     st.markdown("<div class='section-header'>Category Inflow Heatmap (Quarterly)</div>",
                 unsafe_allow_html=True)
 
-    txn_cat = (txn_df[txn_df["txn_type"].isin(["Sip","Lumpsum"])]
+    txn_cat = (txn_df[txn_df["txn_type"].str.upper().isin(["SIP","LUMPSUM"])]
                .merge(funds[["fund_id","category"]], on="fund_id"))
     txn_cat["quarter"] = txn_cat["txn_date"].dt.to_period("Q").astype(str)
     cat_hmap = (txn_cat.groupby(["category","quarter"])["amount"].sum() / 1e7).reset_index()
@@ -632,9 +629,8 @@ elif page == "📅 SIP & Market Trends":
     with col_l:
         st.markdown("<div class='section-header'>Top 5 Categories by Net Inflow</div>",
                     unsafe_allow_html=True)
-        net_inflow = (aum_df.merge(funds[["fund_id","category"]], on="fund_id")
-                      .groupby("category")["net_inflow_cr"].sum().reset_index()
-                      .sort_values("net_inflow_cr", ascending=False).head(5))
+        ni = load("SELECT * FROM fact_category_inflows").groupby("category")["net_inflow_crore"].sum().reset_index()
+        net_inflow = ni.sort_values("net_inflow_crore", ascending=False).head(5)
         net_inflow.columns = ["Category", "Net Inflow (₹ Cr)"]
 
         fig3 = px.bar(net_inflow, x="Category", y="Net Inflow (₹ Cr)",
@@ -652,29 +648,26 @@ elif page == "📅 SIP & Market Trends":
         st.markdown("<div class='section-header'>SIP Book Growth (Active SIPs)</div>",
                     unsafe_allow_html=True)
         sip_df_copy = sip_df.copy()
-        sip_df_copy["start_yr"] = pd.to_datetime(sip_df_copy["start_date"]).dt.year
-        sip_yr = (sip_df_copy[sip_df_copy["status"] == "Active"]
-                  .groupby("start_yr")["sip_amount"].agg(["sum","count"]).reset_index())
-        sip_yr.columns = ["Year","Total Book (₹)","Count"]
-        sip_yr["Book (₹ Cr)"] = sip_yr["Total Book (₹)"] / 1e7
+        sip_df_copy["month_dt"] = pd.to_datetime(sip_df_copy["month"] + "-01")
+        sip_df_copy = sip_df_copy.sort_values("month_dt")
 
         fig4 = go.Figure()
         fig4.add_trace(go.Bar(
-            x=sip_yr["Year"], y=sip_yr["Book (₹ Cr)"],
-            name="SIP Book (₹ Cr)", marker=dict(color=BLUE, opacity=0.8),
-            hovertemplate="Year %{x}<br>₹%{y:.1f} Cr<extra></extra>",
+            x=sip_df_copy["month_dt"], y=sip_df_copy["active_sip_accounts_crore"],
+            name="Active SIP Accts (Cr)", marker=dict(color=BLUE, opacity=0.8),
+            hovertemplate="%{x|%b %Y}<br>%{y:.2f} Cr Accounts<extra></extra>",
         ))
         fig4.add_trace(go.Scatter(
-            x=sip_yr["Year"], y=sip_yr["Count"],
-            name="Active SIPs", yaxis="y2",
+            x=sip_df_copy["month_dt"], y=sip_df_copy["sip_aum_lakh_crore"],
+            name="SIP AUM (Lakh Cr)", yaxis="y2",
             line=dict(color=EMERALD, width=2),
-            hovertemplate="Year %{x}<br>%{y} SIPs<extra></extra>",
+            hovertemplate="%{x|%b %Y}<br>₹%{y:.2f} Lakh Cr<extra></extra>",
         ))
         fig4.update_layout(
             **PLOTLY_LAYOUT, height=360,
-            title=dict(text="Active SIP Book by Start Year", font=dict(size=13, color=NAVY)),
-            yaxis=dict(title="₹ Crore"),
-            yaxis2=dict(title="SIP Count", overlaying="y", side="right"),
+            title=dict(text="Active SIP Accounts & AUM Growth", font=dict(size=13, color=NAVY)),
+            yaxis=dict(title="Accounts (Crore)"),
+            yaxis2=dict(title="SIP AUM (Lakh Crore)", overlaying="y", side="right"),
         )
         fig4.update_layout(legend=dict(x=0.01, y=0.99))
         st.plotly_chart(fig4, use_container_width=True)

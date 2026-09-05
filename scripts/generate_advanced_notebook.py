@@ -65,11 +65,14 @@ PROC = BASE / 'data' / 'processed'
 
 conn = sqlite3.connect(DB)
 nav_df  = pd.read_sql('SELECT * FROM fact_nav',          conn, parse_dates=['date'])
-txn_df  = pd.read_sql('SELECT * FROM fact_transactions', conn, parse_dates=['txn_date'])
-sip_df  = pd.read_sql('SELECT * FROM fact_sip',          conn)
+nav_df  = nav_df.rename(columns={"amfi_code": "fund_id"})
+txn_df  = pd.read_sql('SELECT * FROM fact_transactions', conn, parse_dates=['transaction_date'])
+txn_df  = txn_df.rename(columns={"transaction_date": "txn_date", "amfi_code": "fund_id", "transaction_type": "txn_type", "amount_inr": "amount"})
+sip_df  = pd.read_sql('SELECT * FROM fact_sip_inflows',  conn)
 hold_df = pd.read_sql('SELECT * FROM fact_holdings',     conn)
+hold_df = hold_df.rename(columns={"amfi_code": "fund_id"})
 fund_df = pd.read_sql('SELECT * FROM dim_fund',          conn)
-inv_df  = pd.read_sql('SELECT * FROM dim_investor',      conn)
+fund_df = fund_df.rename(columns={"amfi_code": "fund_id", "fund_house": "amc"})
 conn.close()
 
 nav_pivot = nav_df.pivot_table(index='date', columns='fund_id', values='nav').sort_index()
@@ -145,72 +148,52 @@ ax.legend(fontsize=7, ncol=2)
 save_fig('20_rolling_sharpe.png')
 """))
 
-# ── Investor Cohort Analysis ───────────────────────────────────────────────────
-cells.append(md_cell("## 3 — Investor Cohort Analysis (Registration Year × Investment)"))
+# ── Investor Demographics Analysis ──────────────────────────────────────────────
+cells.append(md_cell("## 3 — Investor Demographics Analysis (Transaction Year × Age Group)"))
 cells.append(code_cell("""\
-inv_copy = inv_df[['investor_id','registration_date','risk_profile','city_tier']].copy()
-inv_copy['reg_year'] = pd.to_datetime(inv_copy['registration_date']).dt.year
-inv_txn = txn_df[['investor_id','txn_date','amount']].merge(
-    inv_copy[['investor_id','reg_year','risk_profile','city_tier']], on='investor_id')
-
-cohort = (inv_txn.groupby(['reg_year','risk_profile'])['amount']
-          .agg(['sum','count']).reset_index())
-cohort.columns = ['reg_year','risk_profile','total_invested','txn_count']
+txn_df['txn_year'] = txn_df['txn_date'].dt.year
+cohort = (txn_df.groupby(['txn_year','age_group'])['amount']
+          .sum().reset_index())
+cohort.columns = ['txn_year','age_group','total_invested']
 cohort['total_invested_cr'] = cohort['total_invested'] / 1e7
-cohort_pivot = cohort.pivot(index='reg_year', columns='risk_profile', values='total_invested_cr').fillna(0)
+cohort_pivot = cohort.pivot(index='txn_year', columns='age_group', values='total_invested_cr').fillna(0)
 
 fig, ax = plt.subplots(figsize=(12, 5))
 cohort_pivot.plot(kind='bar', ax=ax, colormap='Set2', edgecolor='white')
-ax.set_title('Investor Cohort: Total Investment by Registration Year & Risk Profile (₹ Cr)', fontsize=12)
-ax.set_xlabel('Registration Year')
+ax.set_title('Total Investment by Transaction Year & Age Group (₹ Cr)', fontsize=12)
+ax.set_xlabel('Transaction Year')
 ax.set_ylabel('Total Invested (₹ Cr)')
 ax.tick_params(axis='x', rotation=0)
 plt.tight_layout()
-save_fig('21_investor_cohort.png')
-print('Cohort analysis complete.')
+save_fig('21_investor_demographics.png')
+print('Demographics analysis complete.')
 """))
 
-# ── SIP Continuity Flagging ───────────────────────────────────────────────────
-cells.append(md_cell("## 4 — SIP Continuity Flagging"))
+# ── SIP Growth Analysis ───────────────────────────────────────────────────────
+cells.append(md_cell("## 4 — SIP Growth Analysis"))
 cells.append(code_cell("""\
-sip_df['start_dt'] = pd.to_datetime(sip_df['start_date'])
-AS_OF = pd.Timestamp('2026-09-05')
+sip_df['month_dt'] = pd.to_datetime(sip_df['month'] + '-01')
+sip_df = sip_df.sort_values('month_dt')
 
-# Expected instalments (monthly) from start to AS_OF
-sip_df['expected_instalments'] = (
-    (AS_OF.year - sip_df['start_dt'].dt.year) * 12 +
-    (AS_OF.month - sip_df['start_dt'].dt.month) + 1
-).clip(lower=1)
-
-sip_df['continuity_ratio'] = (
-    sip_df['total_instalments_completed'] / sip_df['expected_instalments']
-).clip(upper=1.0)
-
-sip_df['continuity_flag'] = pd.cut(
-    sip_df['continuity_ratio'],
-    bins=[0, 0.33, 0.66, 0.9, 1.01],
-    labels=['At Risk', 'Below Average', 'Good', 'Excellent'],
-    right=True
-)
-
-flag_counts = sip_df['continuity_flag'].value_counts().sort_index()
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-axes[0].pie(flag_counts.values, labels=flag_counts.index,
-            autopct='%1.1f%%', startangle=90,
-            colors=sns.color_palette('RdYlGn', len(flag_counts)))
-axes[0].set_title('SIP Continuity Flag Distribution')
 
-axes[1].hist(sip_df['continuity_ratio'], bins=20,
-             color='mediumseagreen', edgecolor='white')
-axes[1].axvline(0.9, color='green', lw=1.5, linestyle='--', label='90% threshold')
-axes[1].set_title('SIP Continuity Ratio Distribution')
-axes[1].set_xlabel('Continuity Ratio')
-axes[1].legend()
+axes[0].plot(sip_df['month_dt'], sip_df['yoy_growth_pct'],
+             color='purple', lw=2, marker='o')
+axes[0].axhline(0, color='gray', linestyle='--')
+axes[0].set_title('YoY Growth in SIP Inflows (%)')
+axes[0].set_xlabel('Month')
+axes[0].set_ylabel('Growth (%)')
 
-plt.suptitle('SIP Continuity Analysis', fontsize=14)
+axes[1].plot(sip_df['month_dt'], sip_df['sip_aum_lakh_crore'],
+             color='teal', lw=2, marker='s')
+axes[1].set_title('SIP AUM (Lakh Crore)')
+axes[1].set_xlabel('Month')
+axes[1].set_ylabel('AUM (Lakh Cr)')
+
+plt.suptitle('SIP Growth & Momentum', fontsize=14)
 plt.tight_layout()
-save_fig('22_sip_continuity_flags.png')
-print(flag_counts.to_string())
+save_fig('22_sip_growth.png')
+print('Chart 4 done.')
 """))
 
 # ── Risk-Appetite Recommender ─────────────────────────────────────────────────
@@ -237,7 +220,7 @@ def recommend(risk_profile, top_n=3):
     cats = RISK_MAP.get(risk_profile, ['Hybrid'])
     filt = _scorecard[_scorecard['category'].isin(cats)]
     return filt.sort_values('composite_score', ascending=False).head(top_n)[
-        ['overall_rank','fund_id','scheme_name','category','cagr_1y_pct','sharpe','composite_score']
+        ['overall_rank','amfi_code','scheme_name','category','return_1yr_pct','sharpe_ratio','composite_score']
     ].reset_index(drop=True)
 
 for profile in ['Conservative', 'Moderate', 'Aggressive']:
@@ -249,14 +232,14 @@ for profile in ['Conservative', 'Moderate', 'Aggressive']:
 cells.append(md_cell("## 6 — Sector Concentration HHI per Fund"))
 cells.append(code_cell("""\
 # Herfindahl-Hirschman Index = sum of squared allocation shares
-latest_q = hold_df['quarter_end'].max()
+latest_q = hold_df['portfolio_date'].max()
 hhi_rows = []
-for fid, grp in hold_df[hold_df.quarter_end == latest_q].groupby('fund_id'):
-    alloc = grp['allocation_pct'] / grp['allocation_pct'].sum()
+for fid, grp in hold_df[hold_df.portfolio_date == latest_q].groupby('fund_id'):
+    alloc = grp['weight_pct'] / grp['weight_pct'].sum()
     hhi   = float((alloc**2).sum())
     fname = fund_df.loc[fund_df.fund_id == fid, 'scheme_name'].values[0]
     hhi_rows.append({'fund_id': fid, 'scheme_name': fname, 'HHI': round(hhi, 4),
-                     'sectors': len(grp), 'top_sector': grp.loc[grp.allocation_pct.idxmax(), 'sector']})
+                     'sectors': len(grp), 'top_sector': grp.loc[grp.weight_pct.idxmax(), 'sector']})
 
 hhi_df = pd.DataFrame(hhi_rows).sort_values('HHI', ascending=False)
 print(hhi_df.to_string(index=False))

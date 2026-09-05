@@ -23,8 +23,8 @@ def recommend(risk_profile: str, top_n: int = 3) -> pd.DataFrame:
     categories = RISK_MAP.get(risk_profile, ["Hybrid"])
     filtered = scorecard[scorecard["category"].isin(categories)]
     return filtered.sort_values("composite_score", ascending=False).head(top_n)[
-        ["overall_rank", "fund_id", "scheme_name", "category",
-         "cagr_1y_pct", "sharpe", "composite_score"]
+        ["overall_rank", "amfi_code", "scheme_name", "category",
+         "return_1yr_pct", "sharpe_ratio", "composite_score"]
     ].reset_index(drop=True)
 
 

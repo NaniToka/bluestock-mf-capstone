@@ -27,7 +27,9 @@ ab = pd.read_csv(PROC / "alpha_beta.csv")
 
 conn = sqlite3.connect(BASE / "data" / "db" / "bluestock_mf.db")
 aum_df  = pd.read_sql("SELECT * FROM fact_aum", conn)
+aum_df = aum_df.rename(columns={"date": "month", "aum_crore": "aum_cr", "fund_house": "amc"})
 txn_df  = pd.read_sql("SELECT * FROM fact_transactions", conn)
+txn_df = txn_df.rename(columns={"transaction_date": "txn_date", "amfi_code": "fund_id", "transaction_type": "txn_type", "amount_inr": "amount"})
 conn.close()
 
 latest_month = aum_df["month"].max()
@@ -262,11 +264,11 @@ footer_bar(sl)
 # ══════════════════════════════════════════════════════════════════════════════
 sl = add_slide()
 header_bar(sl, "Fund Performance — Composite Scorecard",
-           f"Top Fund: {top['scheme_name']}  |  CAGR 1Y: {top['cagr_1y_pct']:.1f}%  |  Sharpe: {top['sharpe']:.3f}")
+           f"Top Fund: {top['scheme_name']}  |  CAGR 1Y: {top['return_1yr_pct']:.1f}%  |  Sharpe: {top['sharpe_ratio']:.3f}")
 
 add_img(sl, CHARTS/"16_scorecard_heatmap.png", 0.3, 1.4, 7.8, 5.0)
 
-sc_top5 = sc[["overall_rank","fund_id","scheme_name","cagr_1y_pct","sharpe","max_drawdown_pct","composite_score"]].head(5)
+sc_top5 = sc[["overall_rank","amfi_code","scheme_name","return_1yr_pct","sharpe_ratio","max_drawdown_pct","composite_score"]].head(5)
 y_start = 1.5
 col_heads = ["Rank", "ID", "Scheme", "CAGR 1Y%", "Sharpe", "MaxDD%", "Score"]
 col_xs    = [8.2, 8.7, 9.2, 11.0, 11.7, 12.2, 12.8]
@@ -281,9 +283,9 @@ for ri, row in sc_top5.iterrows():
     y = y_start + 0.42 + ri * 0.46
     bg = RGBColor(0xEF,0xF6,0xFF) if ri % 2 == 0 else WHITE
     rect(sl, col_xs[0]-0.02, y, sum(col_ws)+0.04+0.08, 0.42, fill=bg)
-    vals = [str(row["overall_rank"]), row["fund_id"],
-            row["scheme_name"][:20], f"{row['cagr_1y_pct']:.1f}",
-            f"{row['sharpe']:.3f}", f"{row['max_drawdown_pct']:.1f}", f"{row['composite_score']:.2f}"]
+    vals = [str(row["overall_rank"]), str(row["amfi_code"]), 
+            row["scheme_name"][:20]+"..", f"{row['return_1yr_pct']:.1f}%", 
+            f"{row['sharpe_ratio']:.2f}", f"{row['max_drawdown_pct']:.1f}%", f"{row['composite_score']:.2f}"]
     for cx, cw, val in zip(col_xs, col_ws, vals):
         txbox(sl, val, cx, y+0.07, cw, 0.3, size=8, color=DARK, align=PP_ALIGN.CENTER)
 
@@ -298,9 +300,9 @@ header_bar(sl, "Fund Performance — Alpha, Beta & Risk Metrics",
 add_img(sl, CHARTS/"13_risk_return_scatter.png", 0.3, 1.4, 6.2, 4.0)
 add_img(sl, CHARTS/"17_max_drawdown.png",        6.7, 1.4, 6.2, 4.0)
 bullet_box(sl, [
-    f"All equity funds show positive alpha (best: F001 = {ab[ab.fund_id=='F001'].alpha_ann.values[0]:.4f} annualised)",
-    "F001 (Large Cap) and F007 (Bluechip) occupy top-right of risk/return chart: best return per unit of risk",
-    f"Worst max drawdown: F003 Flexi Cap at {sc[sc.fund_id=='F003'].max_drawdown_pct.values[0]:.1f}%  |  Best: F010 Gilt at {sc[sc.fund_id=='F010'].max_drawdown_pct.values[0]:.1f}%",
+    f"All equity funds show positive alpha (best: Top Fund = {ab['alpha'].max():.4f} annualised)",
+    "Top Large Cap funds occupy top-right of risk/return chart: best return per unit of risk",
+    f"Worst max drawdown: Worst at {sc['max_drawdown_pct'].min():.1f}%  |  Best: Best at {sc['max_drawdown_pct'].max():.1f}%",
 ], 0.4, 5.55, 12.5, 1.2, size=11)
 footer_bar(sl)
 
@@ -335,7 +337,7 @@ rect(sl, 6.8, 1.4, 6.0, 5.4, fill=RGBColor(0xF0,0xFD,0xF4), line=EMERALD)
 
 txbox(sl, "📊  Key Findings", 0.5, 1.45, 5.6, 0.45, size=13, bold=True, color=NAVY)
 bullet_box(sl, [
-    f"F001 (Bluestock Large Cap): #1 fund — CAGR {top['cagr_1y_pct']:.1f}%, Sharpe {top['sharpe']:.3f}",
+    f"The top equity large-cap fund: #1 fund — CAGR {top['return_1yr_pct']:.1f}%, Sharpe {top['sharpe_ratio']:.3f}",
     "SIP inflows peaked December 2025 — industry milestone confirmed",
     "60%+ SIP mandates rated Good/Excellent continuity",
     "B30 cities: higher SIP retention despite lower ticket size",
@@ -346,10 +348,10 @@ bullet_box(sl, [
 
 txbox(sl, "🎯  Recommendations", 7.0, 1.45, 5.6, 0.45, size=13, bold=True, color=EMERALD)
 bullet_box(sl, [
-    "Increase marketing spend on F001 — clear performance leader",
+    "Increase marketing spend on top fund — clear performance leader",
     "Trigger advisor outreach for At Risk SIP segment (~15%)",
     "Target 18–30 cohort with digital-first SIP products",
-    "Review F009 (Apex Balanced): –17.35% 1Y CAGR in 2025",
+    "Review underperforming funds with negative CAGR",
     "Migrate to PostgreSQL for production dashboard scalability",
     "Integrate daily AMFI NAV scheduler for live updates",
     "Add ML churn prediction using SIP continuity features",

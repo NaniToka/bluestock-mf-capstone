@@ -33,18 +33,21 @@ ab = pd.read_csv(PROC / "alpha_beta.csv")
 
 conn = sqlite3.connect(BASE / "data" / "db" / "bluestock_mf.db")
 aum_df  = pd.read_sql("SELECT * FROM fact_aum", conn)
+aum_df = aum_df.rename(columns={"date": "month", "aum_crore": "aum_cr", "fund_house": "amc"})
 txn_df  = pd.read_sql("SELECT * FROM fact_transactions", conn)
-inv_df  = pd.read_sql("SELECT * FROM dim_investor", conn)
+txn_df = txn_df.rename(columns={"transaction_date": "txn_date", "amfi_code": "fund_id", "transaction_type": "txn_type", "amount_inr": "amount"})
+
 perf_df = pd.read_sql("SELECT * FROM fact_performance", conn)
 fund_df = pd.read_sql("SELECT * FROM dim_fund", conn)
+fund_df = fund_df.rename(columns={"amfi_code": "fund_id", "fund_house": "amc"})
 conn.close()
 
 latest_month = aum_df["month"].max()
 total_aum    = aum_df[aum_df["month"] == latest_month]["aum_cr"].sum()
 sip_total    = txn_df[txn_df["txn_type"] == "Sip"]["amount"].sum() / 1e7
-folios       = txn_df["folio_no"].nunique()
+folios       = txn_df["investor_id"].nunique()
 eq_sharpe    = perf_df[perf_df["category"] == "Equity"]["sharpe_ratio"].mean()
-eq_ret       = perf_df[perf_df["category"] == "Equity"]["return_1y_pct"].mean()
+eq_ret       = perf_df[perf_df["category"] == "Equity"]["return_1yr_pct"].mean()
 top_fund     = sc.iloc[0]
 
 # ── Styles ─────────────────────────────────────────────────────────────────────
@@ -148,7 +151,7 @@ story += [
     Paragraph("Key Highlights:", H3),
     bullet(f"Industry AUM reached ₹{total_aum:,.0f} Cr as of {latest_month}, driven by consistent SIP growth."),
     bullet(f"Total SIP inflows over the period: ₹{sip_total:.1f} Cr across {txn_df[txn_df.txn_type=='Sip'].shape[0]:,} transactions."),
-    bullet(f"Top-ranked fund: {top_fund['scheme_name']} (F001) — 1Y CAGR {top_fund['cagr_1y_pct']:.1f}%, Sharpe {top_fund['sharpe']:.3f}, Composite Score {top_fund['composite_score']}."),
+    bullet(f"Top-ranked fund: {top_fund['scheme_name']}  — 1Y CAGR {top_fund['return_1yr_pct']:.1f}%, Sharpe {top_fund['sharpe_ratio']:.3f}, Composite Score {top_fund['composite_score']}."),
     bullet(f"Average equity fund Sharpe ratio: {eq_sharpe:.3f}; average 1Y return: {eq_ret:.1f}%."),
     bullet(f"SIP inflows peaked in December 2025 — the industry milestone confirmed in the data."),
     bullet(f"B30 (non-metro) cities show higher SIP continuation rates despite lower absolute inflows."),
@@ -173,7 +176,7 @@ ds_data = [
     ["3",  "aum_history.csv",             "560",    "fund_id, month, aum_cr, net_inflow_cr"],
     ["4",  "investor_transactions.csv",   "50,000", "txn_id, investor_id, txn_type, amount, city_tier"],
     ["5",  "sip_register.csv",            "800",    "sip_id, investor_id, sip_amount, status"],
-    ["6",  "scheme_performance.csv",      "40",     "fund_id, year, return_1y_pct, sharpe_ratio, expense_ratio"],
+    ["6",  "scheme_performance.csv",      "40",     "fund_id, year, return_1yr_pct, sharpe_ratio, expense_ratio"],
     ["7",  "portfolio_holdings.csv",      "1,260",  "fund_id, quarter_end, sector, allocation_pct"],
     ["8",  "benchmark_returns.csv",       "9,760",  "benchmark, date, index_value, daily_return_pct"],
     ["9",  "investor_demographics.csv",   "2,000",  "investor_id, age, city, kyc_status, risk_profile"],
@@ -242,7 +245,7 @@ story += [
     Paragraph("Scheme Performance:", H3),
     bullet("5 fund-year records had expense_ratio > 3.0% (above SEBI TER limit). All capped to 2.5% (equity) / 2.25% (debt/hybrid)."),
     bullet("expense_ratio_flagged column added to track corrected records."),
-    bullet("alpha_pct recalculated as return_1y_pct − benchmark_return_pct after correction."),
+    bullet("alpha_pct recalculated as return_1yr_pct − benchmark_return_pct after correction."),
     Spacer(1, 0.3*cm),
     PageBreak(),
 ]
@@ -260,7 +263,7 @@ eda_charts = [
 ]
 
 findings = [
-    "Equity large-cap fund F001 (Bluestock Large Cap) delivered the strongest NAV appreciation, "
+    "Equity large-cap fund The top equity large-cap fund delivered the strongest NAV appreciation, "
     "crossing ₹200 NAV by late 2025 — approximately 3× its 2022 starting value.",
     f"Industry AUM reached ₹{total_aum:,.0f} Cr by August 2026, with Equity funds contributing ~55% of total.",
     "SIP inflows peaked in December 2025, confirming the industry milestone. The month saw the highest "
@@ -277,7 +280,7 @@ findings = [
     "from non-compliant fee structures.",
     "Moderate risk-profile investors account for 42% of total AUM, making them the primary "
     "segment for cross-sell and product upgrade campaigns.",
-    "Rolling 90-day NAV correlation between F001 and F007 (both Large Cap) exceeds 0.92, "
+    "Rolling 90-day NAV correlation between the top large cap funds exceeds 0.92, "
     "suggesting minimal benefit to holding both simultaneously.",
 ]
 
@@ -318,16 +321,16 @@ story += [
     Paragraph("Fund Composite Scorecard:", H3),
 ]
 
-sc_show = sc[["overall_rank","fund_id","scheme_name","category","cagr_1y_pct",
-              "cagr_3y_pct","sharpe","sortino","max_drawdown_pct","composite_score"]].copy()
+sc_show = sc[["overall_rank","amfi_code","scheme_name","category","return_1yr_pct",
+              "return_3yr_pct","sharpe_ratio","sortino_ratio","max_drawdown_pct","composite_score"]].copy()
 sc_show.columns = ["Rank","ID","Scheme","Cat","CAGR 1Y%","CAGR 3Y%","Sharpe","Sortino","MaxDD%","Score"]
 sc_show = sc_show.round(2)
 story.append(df_table(sc_show, [1.2*cm,1.3*cm,5*cm,1.5*cm,1.8*cm,1.8*cm,1.5*cm,1.5*cm,1.8*cm,1.5*cm]))
 story.append(Spacer(1, 0.3*cm))
 
 story += [Paragraph("Alpha & Beta (OLS vs Nifty 100):", H3)]
-ab_show = ab[["fund_id","scheme_name","category","alpha_ann","beta","r_squared"]].copy()
-ab_show.columns = ["Fund ID","Scheme","Category","Alpha (ann.)","Beta","R²"]
+ab_show = ab[["amfi_code","scheme_name","category","alpha","beta","sharpe_ratio"]].copy()
+ab_show.columns = ["Fund ID", "Scheme", "Category", "Alpha", "Beta", "Sharpe"]
 ab_show = ab_show.round(4)
 story.append(df_table(ab_show, [1.5*cm,5.5*cm,2*cm,2.5*cm,2*cm,2*cm]))
 story.append(Spacer(1, 0.3*cm))
@@ -352,10 +355,10 @@ story += [Paragraph("7. Advanced Analytics", H1), hr(),
               "and a risk-appetite based fund recommender.", BODY),
     Paragraph("7.1  Historical Value at Risk (VaR) & CVaR", H3),
     bullet("At 95% confidence, equity funds show daily VaR of –1.5% to –2.1%, vs debt funds at –0.2% to –0.4%."),
-    bullet("CVaR (Expected Shortfall) at 99% for F001: –2.8% per day — the worst expected loss on the worst 1% of days."),
-    bullet("Debt funds (F004, F005, F010) remain below –0.5% VaR at 99%, confirming capital preservation properties."),
+    bullet("CVaR (Expected Shortfall) at 99% for the top fund: –2.8% per day — the worst expected loss on the worst 1% of days."),
+    bullet("Debt funds remain below –0.5% VaR at 99%, confirming capital preservation properties."),
     Paragraph("7.2  Rolling Sharpe Ratio", H3),
-    bullet("F001 achieved a rolling 90-day Sharpe above 2.0 in late 2025 — exceptional risk-adjusted performance."),
+    bullet("The top fund achieved a rolling 90-day Sharpe above 2.0 in late 2025 — exceptional risk-adjusted performance."),
     bullet("All equity funds suffered a sharp Sharpe decline in mid-2022 (bear market), recovering through 2024–2025."),
     Paragraph("7.3  Investor Cohort Analysis", H3),
     bullet("2021–2023 registration cohort contributes the highest aggregate investment across all risk profiles."),
@@ -367,9 +370,9 @@ story += [Paragraph("7. Advanced Analytics", H1), hr(),
     bullet("Most equity funds show HHI < 0.15, indicating healthy sector diversification across 10 sectors."),
     bullet("Financial Services consistently the largest sector weight (18–22% average allocation)."),
     Paragraph("7.6  Risk-Appetite Recommender", H3),
-    bullet("Conservative: F010 (Summit Gilt), F005 (Bluestock Liquid), F004 (Short Duration Debt)"),
-    bullet("Moderate: F006 (Bluestock Hybrid), F009 (Apex Balanced Advantage), F001 (Large Cap)"),
-    bullet("Aggressive: F001 (Bluestock Large Cap), F007 (Horizon Bluechip), F002 (Mid Cap)"),
+    bullet("Conservative: Debt and Liquid funds"),
+    bullet("Moderate: Hybrid and Balanced funds"),
+    bullet("Aggressive: Large Cap, Mid Cap, and Small Cap funds"),
     Spacer(1, 0.3*cm),
 ]
 
@@ -427,10 +430,10 @@ story += [Paragraph("10. Recommendations", H1), hr(),
     bullet("Target the 18–30 cohort for digital-first SIP products: this segment is growing fastest and will be the largest by 2028."),
     bullet("The 'At Risk' SIP segment (15% of mandates) should trigger automated advisor outreach within 2 missed instalments."),
     Paragraph("For Fund Managers:", H3),
-    bullet(f"Bluestock Large Cap Fund (F001) is the clear performance leader: 1Y CAGR {top_fund['cagr_1y_pct']:.1f}%, "
-           f"Sharpe {top_fund['sharpe']:.3f}, composite score {top_fund['composite_score']}. Increase marketing spend."),
-    bullet("Hybrid funds (F006, F009) underperformed their benchmarks in 2025. Review asset allocation and rebalancing frequency."),
-    bullet("Apex Balanced Advantage (F009) showed negative 1Y CAGR (–17.35%) — consider strategy review or fund restructuring."),
+    bullet(f"Bluestock Large Cap Fund  is the clear performance leader: 1Y CAGR {top_fund['return_1yr_pct']:.1f}%, "
+           f"Sharpe {top_fund['sharpe_ratio']:.3f}, composite score {top_fund['composite_score']}. Increase marketing spend."),
+    bullet("Hybrid funds underperformed their benchmarks in 2025. Review asset allocation and rebalancing frequency."),
+    bullet("Underperforming funds showed negative 1Y CAGR — consider strategy review or fund restructuring."),
     Paragraph("For Technology:", H3),
     bullet("Integrate real AMFI NAV feed (mfapi.in) as a daily scheduler for production-grade live NAV updates."),
     bullet("Migrate SQLite to PostgreSQL for multi-user dashboard support and concurrent write operations."),

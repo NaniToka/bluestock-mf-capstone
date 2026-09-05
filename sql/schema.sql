@@ -1,147 +1,146 @@
 -- ============================================================
 -- Bluestock MF Analytics – Star Schema DDL (SQLite)
+-- Real dataset: amfi_code as primary join key
 -- ============================================================
 
 PRAGMA foreign_keys = ON;
 
--- ────────────────────────────────────────────
 -- Dimension: Funds
--- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS dim_fund (
-    fund_id          TEXT PRIMARY KEY,
-    scheme_name      TEXT NOT NULL,
-    amfi_code        INTEGER,
-    category         TEXT,
-    sub_category     TEXT,
-    amc              TEXT,
-    benchmark        TEXT,
-    expense_ratio    REAL,
-    launch_date      TEXT,
-    fund_manager     TEXT,
-    aum_cr           REAL,
-    exit_load_pct    REAL,
-    lock_in_days     INTEGER
+    amfi_code            INTEGER PRIMARY KEY,
+    fund_house           TEXT,
+    scheme_name          TEXT NOT NULL,
+    category             TEXT,
+    sub_category         TEXT,
+    plan                 TEXT,
+    launch_date          TEXT,
+    benchmark            TEXT,
+    expense_ratio_pct    REAL,
+    expense_ratio_flagged INTEGER,
+    exit_load_pct        REAL,
+    min_sip_amount       REAL,
+    min_lumpsum_amount   REAL,
+    fund_manager         TEXT,
+    risk_category        TEXT,
+    sebi_category_code   TEXT
 );
 
--- ────────────────────────────────────────────
--- Dimension: Investors
--- ────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS dim_investor (
-    investor_id       TEXT PRIMARY KEY,
-    age               INTEGER,
-    gender            TEXT,
-    city              TEXT,
-    city_tier         TEXT,
-    risk_profile      TEXT,
-    kyc_status        TEXT,
-    annual_income_lakh REAL,
-    occupation        TEXT,
-    pan_verified      INTEGER,   -- 0/1
-    registration_date TEXT
-);
-
--- ────────────────────────────────────────────
 -- Fact: Daily NAV
--- ────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS fact_nav (
-    nav_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    fund_id          TEXT    NOT NULL REFERENCES dim_fund(fund_id),
-    date             TEXT    NOT NULL,
-    nav              REAL    NOT NULL,
-    nav_change_pct   REAL,
-    UNIQUE(fund_id, date)
+    nav_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    amfi_code       INTEGER REFERENCES dim_fund(amfi_code),
+    date            TEXT NOT NULL,
+    nav             REAL NOT NULL,
+    nav_change_pct  REAL,
+    UNIQUE(amfi_code, date)
 );
 
--- ────────────────────────────────────────────
--- Fact: Investor Transactions
--- ────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS fact_transactions (
-    txn_id           TEXT PRIMARY KEY,
-    investor_id      TEXT REFERENCES dim_investor(investor_id),
-    fund_id          TEXT REFERENCES dim_fund(fund_id),
-    txn_date         TEXT    NOT NULL,
-    txn_month        TEXT,
-    txn_type         TEXT,
-    amount           REAL,
-    units            REAL,
-    nav_at_txn       REAL,
-    city             TEXT,
-    city_tier        TEXT,
-    kyc_status       TEXT,
-    kyc_valid        INTEGER,  -- 0/1
-    folio_no         TEXT,
-    risk_profile     TEXT
-);
-
--- ────────────────────────────────────────────
--- Fact: Scheme Performance (annual)
--- ────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS fact_performance (
-    perf_id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    fund_id                  TEXT REFERENCES dim_fund(fund_id),
-    year                     INTEGER,
-    return_1y_pct            REAL,
-    return_3y_pct            REAL,
-    return_5y_pct            REAL,
-    benchmark_return_pct     REAL,
-    alpha_pct                REAL,
-    expense_ratio            REAL,
-    expense_ratio_flagged    INTEGER,
-    sharpe_ratio             REAL,
-    std_dev                  REAL,
-    category                 TEXT,
-    UNIQUE(fund_id, year)
-);
-
--- ────────────────────────────────────────────
--- Fact: Monthly AUM
--- ────────────────────────────────────────────
+-- Fact: AUM by Fund House (monthly)
 CREATE TABLE IF NOT EXISTS fact_aum (
-    aum_id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    fund_id        TEXT REFERENCES dim_fund(fund_id),
-    month          TEXT NOT NULL,
-    aum_cr         REAL,
-    net_inflow_cr  REAL,
-    UNIQUE(fund_id, month)
+    aum_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    date                TEXT,
+    fund_house          TEXT,
+    aum_lakh_crore      REAL,
+    aum_crore           REAL,
+    num_schemes         INTEGER,
+    UNIQUE(date, fund_house)
 );
 
--- ────────────────────────────────────────────
--- Supporting: SIP Register
--- ────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS fact_sip (
-    sip_id                      TEXT PRIMARY KEY,
-    investor_id                 TEXT REFERENCES dim_investor(investor_id),
-    fund_id                     TEXT REFERENCES dim_fund(fund_id),
-    sip_amount                  REAL,
-    sip_date                    INTEGER,
-    start_date                  TEXT,
-    frequency                   TEXT,
-    total_instalments_completed INTEGER,
-    status                      TEXT,
-    last_instalment_date        TEXT,
-    mandate_amount              REAL
+-- Fact: Monthly SIP Inflows (industry level)
+CREATE TABLE IF NOT EXISTS fact_sip_inflows (
+    sip_id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    month                      TEXT UNIQUE,
+    sip_inflow_crore           REAL,
+    active_sip_accounts_crore  REAL,
+    new_sip_accounts_lakh      REAL,
+    sip_aum_lakh_crore         REAL,
+    yoy_growth_pct             REAL
 );
 
--- ────────────────────────────────────────────
--- Supporting: Portfolio Holdings
--- ────────────────────────────────────────────
+-- Fact: Category Inflows (monthly)
+CREATE TABLE IF NOT EXISTS fact_category_inflows (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    month           TEXT,
+    category        TEXT,
+    net_inflow_crore REAL,
+    UNIQUE(month, category)
+);
+
+-- Fact: Industry Folio Count (monthly)
+CREATE TABLE IF NOT EXISTS fact_folio_count (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    month                 TEXT UNIQUE,
+    total_folios_crore    REAL,
+    equity_folios_crore   REAL,
+    debt_folios_crore     REAL,
+    hybrid_folios_crore   REAL,
+    others_folios_crore   REAL
+);
+
+-- Fact: Scheme Performance
+CREATE TABLE IF NOT EXISTS fact_performance (
+    perf_id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    amfi_code               INTEGER REFERENCES dim_fund(amfi_code),
+    scheme_name             TEXT,
+    fund_house              TEXT,
+    category                TEXT,
+    plan                    TEXT,
+    return_1yr_pct          REAL,
+    return_3yr_pct          REAL,
+    return_5yr_pct          REAL,
+    benchmark_3yr_pct       REAL,
+    alpha                   REAL,
+    beta                    REAL,
+    sharpe_ratio            REAL,
+    sortino_ratio           REAL,
+    std_dev_ann_pct         REAL,
+    max_drawdown_pct        REAL,
+    aum_crore               REAL,
+    expense_ratio_pct       REAL,
+    expense_ratio_flagged   INTEGER,
+    morningstar_rating      INTEGER,
+    risk_grade              TEXT
+);
+
+-- Fact: Investor Transactions
+CREATE TABLE IF NOT EXISTS fact_transactions (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    investor_id         TEXT,
+    transaction_date    TEXT,
+    txn_month           TEXT,
+    amfi_code           INTEGER REFERENCES dim_fund(amfi_code),
+    transaction_type    TEXT,
+    amount_inr          REAL,
+    state               TEXT,
+    city                TEXT,
+    city_tier           TEXT,
+    age_group           TEXT,
+    gender              TEXT,
+    annual_income_lakh  REAL,
+    payment_mode        TEXT,
+    kyc_status          TEXT,
+    kyc_valid           INTEGER
+);
+
+-- Fact: Portfolio Holdings (stock level)
 CREATE TABLE IF NOT EXISTS fact_holdings (
-    holding_id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    fund_id        TEXT REFERENCES dim_fund(fund_id),
-    quarter_end    TEXT,
-    sector         TEXT,
-    allocation_pct REAL,
-    num_stocks     INTEGER
+    holding_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    amfi_code       INTEGER REFERENCES dim_fund(amfi_code),
+    stock_symbol    TEXT,
+    stock_name      TEXT,
+    sector          TEXT,
+    weight_pct      REAL,
+    market_value_cr REAL,
+    current_price_inr REAL,
+    portfolio_date  TEXT
 );
 
--- ────────────────────────────────────────────
--- Supporting: Benchmark Returns
--- ────────────────────────────────────────────
+-- Fact: Benchmark Indices
 CREATE TABLE IF NOT EXISTS fact_benchmark (
     bm_id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    benchmark          TEXT,
     date               TEXT,
-    index_value        REAL,
+    index_name         TEXT,
+    close_value        REAL,
     daily_return_pct   REAL,
-    UNIQUE(benchmark, date)
+    UNIQUE(date, index_name)
 );

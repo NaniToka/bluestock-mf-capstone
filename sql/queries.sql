@@ -1,151 +1,115 @@
 -- ============================================================
--- Bluestock MF Analytics – 10 Business Queries (SQLite)
+-- Bluestock MF Analytics – 10 Business Queries (Real Dataset)
 -- ============================================================
 
--- Q1: Top 5 funds by latest AUM (most recent month)
-SELECT
-    f.fund_id,
-    f.scheme_name,
-    f.category,
-    a.month,
-    a.aum_cr
-FROM fact_aum a
-JOIN dim_fund f ON a.fund_id = f.fund_id
-WHERE a.month = (SELECT MAX(month) FROM fact_aum)
-ORDER BY a.aum_cr DESC
+-- Q1: Top 5 fund houses by latest AUM
+SELECT fund_house,
+       ROUND(SUM(aum_crore), 0)  AS total_aum_crore,
+       SUM(num_schemes)           AS total_schemes
+FROM fact_aum
+WHERE date = (SELECT MAX(date) FROM fact_aum)
+GROUP BY fund_house
+ORDER BY total_aum_crore DESC
 LIMIT 5;
 
 -- ─────────────────────────────────────────────────────────────
 
--- Q2: Average monthly NAV per fund for 2025
-SELECT
-    fund_id,
-    SUBSTR(date, 1, 7)  AS month,
-    ROUND(AVG(nav), 4)  AS avg_nav
-FROM fact_nav
-WHERE date LIKE '2025%'
-GROUP BY fund_id, month
-ORDER BY fund_id, month;
-
--- ─────────────────────────────────────────────────────────────
-
--- Q3: Total SIP inflows by year (YoY growth)
-SELECT
-    SUBSTR(txn_date, 1, 4)         AS year,
-    ROUND(SUM(amount) / 1e7, 2)    AS sip_inflow_cr,
-    COUNT(*)                        AS num_transactions
-FROM fact_transactions
-WHERE txn_type = 'Sip'
-GROUP BY year
-ORDER BY year;
-
--- ─────────────────────────────────────────────────────────────
-
--- Q4: SIP milestone – Dec 2025 monthly SIP inflows
-SELECT
-    txn_month,
-    ROUND(SUM(amount) / 1e7, 2)  AS total_sip_cr,
-    COUNT(DISTINCT investor_id)   AS unique_investors,
-    COUNT(*)                       AS num_sips
-FROM fact_transactions
-WHERE txn_type = 'Sip'
-  AND txn_month BETWEEN '2025-01' AND '2025-12'
-GROUP BY txn_month
-ORDER BY txn_month;
-
--- ─────────────────────────────────────────────────────────────
-
--- Q5: Fund performance ranking by 1-year return (latest year)
-SELECT
-    p.fund_id,
-    f.scheme_name,
-    f.category,
-    p.year,
-    p.return_1y_pct,
-    p.benchmark_return_pct,
-    p.alpha_pct,
-    p.sharpe_ratio,
-    RANK() OVER (ORDER BY p.return_1y_pct DESC) AS perf_rank
-FROM fact_performance p
-JOIN dim_fund f ON p.fund_id = f.fund_id
-WHERE p.year = (SELECT MAX(year) FROM fact_performance)
-ORDER BY perf_rank;
-
--- ─────────────────────────────────────────────────────────────
-
--- Q6: T30 vs B30 city-tier analysis – total investment and investor count
-SELECT
-    city_tier,
-    txn_type,
-    COUNT(DISTINCT investor_id)        AS unique_investors,
-    COUNT(*)                            AS num_transactions,
-    ROUND(SUM(amount) / 1e7, 2)        AS total_invested_cr
-FROM fact_transactions
-GROUP BY city_tier, txn_type
-ORDER BY city_tier, total_invested_cr DESC;
-
--- ─────────────────────────────────────────────────────────────
-
--- Q7: AUM growth trend – total industry AUM per month (2024-2026)
-SELECT
-    month,
-    ROUND(SUM(aum_cr), 2)          AS total_aum_cr,
-    ROUND(SUM(net_inflow_cr), 2)   AS total_net_inflow_cr
-FROM fact_aum
-WHERE month >= '2024-01'
-GROUP BY month
+-- Q2: Monthly industry SIP inflow trend (2022–2025)
+SELECT month,
+       sip_inflow_crore,
+       active_sip_accounts_crore,
+       ROUND(yoy_growth_pct, 1) AS yoy_pct
+FROM fact_sip_inflows
 ORDER BY month;
 
 -- ─────────────────────────────────────────────────────────────
 
--- Q8: Investor demographics – age-band breakdown of SIP participation
-SELECT
-    CASE
-        WHEN d.age BETWEEN 18 AND 30 THEN '18-30'
-        WHEN d.age BETWEEN 31 AND 45 THEN '31-45'
-        WHEN d.age BETWEEN 46 AND 60 THEN '46-60'
-        ELSE '60+'
-    END                                 AS age_band,
-    d.gender,
-    COUNT(DISTINCT t.investor_id)        AS investors,
-    ROUND(SUM(t.amount) / 1e7, 2)       AS total_sip_cr
-FROM fact_transactions t
-JOIN dim_investor d ON t.investor_id = d.investor_id
-WHERE t.txn_type = 'Sip'
-GROUP BY age_band, d.gender
-ORDER BY age_band, d.gender;
-
--- ─────────────────────────────────────────────────────────────
-
--- Q9: Top 10 sectors by average allocation across equity funds (latest quarter)
-SELECT
-    h.sector,
-    ROUND(AVG(h.allocation_pct), 2) AS avg_allocation_pct,
-    SUM(h.num_stocks)               AS total_stocks
-FROM fact_holdings h
-WHERE h.quarter_end = (SELECT MAX(quarter_end) FROM fact_holdings)
-GROUP BY h.sector
-ORDER BY avg_allocation_pct DESC
+-- Q3: Top 10 schemes by 1-year return
+SELECT f.scheme_name, f.fund_house, f.category,
+       p.return_1yr_pct, p.sharpe_ratio, p.aum_crore,
+       p.morningstar_rating
+FROM fact_performance p
+JOIN dim_fund f ON p.amfi_code = f.amfi_code
+ORDER BY p.return_1yr_pct DESC
 LIMIT 10;
 
 -- ─────────────────────────────────────────────────────────────
 
--- Q10: Funds with consistently high expense ratios vs category average
-SELECT
-    f.fund_id,
-    f.scheme_name,
-    f.category,
-    ROUND(AVG(p.expense_ratio), 2)   AS avg_expense_ratio,
-    ROUND(
-        AVG(p.expense_ratio) - (
-            SELECT AVG(p2.expense_ratio)
-            FROM fact_performance p2
-            JOIN dim_fund f2 ON p2.fund_id = f2.fund_id
-            WHERE f2.category = f.category
-        ), 2
-    )                                 AS vs_category_avg,
-    SUM(p.expense_ratio_flagged)      AS times_flagged
+-- Q4: Category-wise net inflows (latest 6 months)
+SELECT category,
+       ROUND(SUM(net_inflow_crore), 0) AS total_net_inflow_crore
+FROM fact_category_inflows
+WHERE month >= (SELECT SUBSTR(MAX(month),1,4) || '-' ||
+                PRINTF('%02d', CAST(SUBSTR(MAX(month),6,2) AS INTEGER) - 5)
+                FROM fact_category_inflows)
+GROUP BY category
+ORDER BY total_net_inflow_crore DESC;
+
+-- ─────────────────────────────────────────────────────────────
+
+-- Q5: Fund performance ranking — alpha vs benchmark
+SELECT f.scheme_name, f.fund_house, f.category,
+       p.return_1yr_pct, p.benchmark_3yr_pct,
+       p.alpha, p.beta, p.sharpe_ratio,
+       RANK() OVER (ORDER BY p.alpha DESC) AS alpha_rank
 FROM fact_performance p
-JOIN dim_fund f ON p.fund_id = f.fund_id
-GROUP BY f.fund_id, f.scheme_name, f.category
-ORDER BY avg_expense_ratio DESC;
+JOIN dim_fund f ON p.amfi_code = f.amfi_code
+ORDER BY alpha_rank;
+
+-- ─────────────────────────────────────────────────────────────
+
+-- Q6: T30 vs B30 transaction analysis
+SELECT city_tier,
+       transaction_type,
+       COUNT(*)                              AS num_txns,
+       ROUND(SUM(amount_inr) / 1e7, 2)      AS total_cr,
+       COUNT(DISTINCT investor_id)           AS unique_investors
+FROM fact_transactions
+GROUP BY city_tier, transaction_type
+ORDER BY city_tier, total_cr DESC;
+
+-- ─────────────────────────────────────────────────────────────
+
+-- Q7: Age group SIP analysis
+SELECT age_group,
+       COUNT(*)                         AS num_sip_txns,
+       ROUND(AVG(amount_inr), 0)        AS avg_sip_amount,
+       ROUND(SUM(amount_inr) / 1e7, 2)  AS total_cr
+FROM fact_transactions
+WHERE transaction_type = 'SIP'
+GROUP BY age_group
+ORDER BY age_group;
+
+-- ─────────────────────────────────────────────────────────────
+
+-- Q8: Top 10 sectors by total portfolio weight (latest holdings)
+SELECT sector,
+       ROUND(AVG(weight_pct), 2)        AS avg_weight_pct,
+       ROUND(SUM(market_value_cr), 0)   AS total_mkt_value_cr,
+       COUNT(DISTINCT stock_symbol)     AS num_stocks
+FROM fact_holdings
+WHERE portfolio_date = (SELECT MAX(portfolio_date) FROM fact_holdings)
+GROUP BY sector
+ORDER BY avg_weight_pct DESC
+LIMIT 10;
+
+-- ─────────────────────────────────────────────────────────────
+
+-- Q9: Industry folio count growth
+SELECT month, total_folios_crore,
+       equity_folios_crore,
+       ROUND(equity_folios_crore / total_folios_crore * 100, 1) AS equity_share_pct
+FROM fact_folio_count
+ORDER BY month;
+
+-- ─────────────────────────────────────────────────────────────
+
+-- Q10: State-wise transaction volumes (top 10 states)
+SELECT state,
+       COUNT(*)                             AS num_txns,
+       ROUND(SUM(amount_inr) / 1e7, 2)     AS total_cr,
+       COUNT(DISTINCT investor_id)          AS unique_investors
+FROM fact_transactions
+GROUP BY state
+ORDER BY total_cr DESC
+LIMIT 10;

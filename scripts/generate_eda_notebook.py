@@ -70,16 +70,22 @@ print(f'Charts → {CHARTS}')
 cells.append(md_cell("## Load Data"))
 cells.append(code_cell("""\
 nav_df   = pd.read_sql('SELECT * FROM fact_nav',          conn, parse_dates=['date'])
-txn_df   = pd.read_sql('SELECT * FROM fact_transactions', conn, parse_dates=['txn_date'])
+nav_df   = nav_df.rename(columns={"amfi_code": "fund_id"})
+txn_df   = pd.read_sql('SELECT * FROM fact_transactions', conn, parse_dates=['transaction_date'])
+txn_df   = txn_df.rename(columns={"transaction_date": "txn_date", "amfi_code": "fund_id", "transaction_type": "txn_type", "amount_inr": "amount"})
 aum_df   = pd.read_sql('SELECT * FROM fact_aum',          conn)
-sip_df   = pd.read_sql('SELECT * FROM fact_sip',          conn)
+aum_df   = aum_df.rename(columns={"date": "month", "aum_crore": "aum_cr", "fund_house": "amc"})
+sip_df   = pd.read_sql('SELECT * FROM fact_sip_inflows',  conn)
 fund_df  = pd.read_sql('SELECT * FROM dim_fund',          conn)
-inv_df   = pd.read_sql('SELECT * FROM dim_investor',      conn)
+fund_df  = fund_df.rename(columns={"amfi_code": "fund_id", "fund_house": "amc"})
 perf_df  = pd.read_sql('SELECT * FROM fact_performance',  conn)
+perf_df  = perf_df.rename(columns={"amfi_code": "fund_id", "fund_house": "amc"})
 hold_df  = pd.read_sql('SELECT * FROM fact_holdings',     conn)
+hold_df  = hold_df.rename(columns={"amfi_code": "fund_id"})
 bm_df    = pd.read_sql('SELECT * FROM fact_benchmark',    conn, parse_dates=['date'])
 
-aum_df['month_dt'] = pd.to_datetime(aum_df['month'] + '-01')
+aum_df['month'] = pd.to_datetime(aum_df['month'])
+aum_df['month_dt'] = aum_df['month']
 print('Data loaded.')
 """))
 
@@ -101,7 +107,7 @@ print('Chart 1 done.')
 # ── Chart 2: AUM Growth – Stacked Area ────────────────────────────────────────
 cells.append(md_cell("## Chart 2 — AUM Growth by Fund (Stacked Area)"))
 cells.append(code_cell("""\
-aum_pivot = aum_df.pivot_table(index='month_dt', columns='fund_id', values='aum_cr', aggfunc='sum').fillna(0)
+aum_pivot = aum_df.pivot_table(index='month_dt', columns='amc', values='aum_cr', aggfunc='sum').fillna(0)
 fig, ax = plt.subplots(figsize=(14, 6))
 aum_pivot.plot.area(ax=ax, alpha=0.7, lw=0)
 ax.set_title('Total AUM Growth – All Funds 2022–2026 (Stacked)', fontsize=14)
@@ -178,13 +184,15 @@ print('Chart 5 done.')
 # ── Chart 6: Investor Demographics – Age Distribution ─────────────────────────
 cells.append(md_cell("## Chart 6 — Investor Age Distribution"))
 cells.append(code_cell("""\
+unique_inv = txn_df.drop_duplicates(subset=['investor_id'])
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-axes[0].hist(inv_df['age'], bins=20, color='steelblue', edgecolor='white')
+age_counts = unique_inv['age_group'].value_counts().sort_index()
+axes[0].bar(age_counts.index, age_counts.values, color='steelblue', edgecolor='white')
 axes[0].set_title('Age Distribution of Investors')
-axes[0].set_xlabel('Age')
+axes[0].set_xlabel('Age Group')
 axes[0].set_ylabel('Count')
 
-gender_counts = inv_df['gender'].value_counts()
+gender_counts = unique_inv['gender'].value_counts()
 axes[1].pie(gender_counts.values, labels=gender_counts.index,
             autopct='%1.1f%%', startangle=90, colors=['#4C72B0','#DD8452'])
 axes[1].set_title('Gender Distribution')
@@ -238,9 +246,8 @@ print('Chart 8 done.')
 cells.append(md_cell("## Chart 9 — Individual Fund AUM Growth Lines"))
 cells.append(code_cell("""\
 fig, ax = plt.subplots(figsize=(14, 6))
-for fid, grp in aum_df.groupby('fund_id'):
-    fname = fund_df.loc[fund_df.fund_id == fid, 'scheme_name'].values[0]
-    ax.plot(grp['month_dt'], grp['aum_cr'], marker='o', markersize=2, lw=1.2, label=fname[:22])
+for fid, grp in aum_df.groupby('amc'):
+    ax.plot(grp['month_dt'], grp['aum_cr'], marker='o', markersize=2, lw=1.2, label=fid[:22])
 ax.set_title('Fund AUM Growth Trend (2022–2026)', fontsize=13)
 ax.set_xlabel('Month')
 ax.set_ylabel('AUM (₹ Cr)')
@@ -253,8 +260,8 @@ print('Chart 9 done.')
 # ── Chart 10: Sector Allocation Donut ─────────────────────────────────────────
 cells.append(md_cell("## Chart 10 — Sector Allocation Donut (Latest Quarter)"))
 cells.append(code_cell("""\
-latest_q = hold_df['quarter_end'].max()
-sector_agg = hold_df[hold_df.quarter_end == latest_q].groupby('sector')['allocation_pct'].mean()
+latest_q = hold_df['portfolio_date'].max()
+sector_agg = hold_df[hold_df.portfolio_date == latest_q].groupby('sector')['weight_pct'].mean()
 sector_agg = sector_agg.sort_values(ascending=False)
 
 fig, ax = plt.subplots(figsize=(9, 9))
@@ -267,19 +274,19 @@ save_fig('10_sector_donut.png')
 print('Chart 10 done.')
 """))
 
-# ── Chart 11: Risk Profile Distribution ───────────────────────────────────────
-cells.append(md_cell("## Chart 11 — Risk Profile Distribution"))
+# ── Chart 11: City Tier Distribution ───────────────────────────────────────
+cells.append(md_cell("## Chart 11 — City Tier Distribution"))
 cells.append(code_cell("""\
-risk_counts = inv_df['risk_profile'].value_counts()
+tier_counts = unique_inv['city_tier'].value_counts()
 fig, ax = plt.subplots(figsize=(7, 5))
-ax.bar(risk_counts.index, risk_counts.values,
-       color=sns.color_palette('Set2', len(risk_counts)))
-ax.set_title('Investor Risk Profile Distribution', fontsize=13)
-ax.set_xlabel('Risk Profile')
+ax.bar(tier_counts.index, tier_counts.values,
+       color=sns.color_palette('Set2', len(tier_counts)))
+ax.set_title('Investor City Tier Distribution', fontsize=13)
+ax.set_xlabel('City Tier')
 ax.set_ylabel('Number of Investors')
-for i, v in enumerate(risk_counts.values):
+for i, v in enumerate(tier_counts.values):
     ax.text(i, v + 5, str(v), ha='center', fontsize=9)
-save_fig('11_risk_profile_dist.png')
+save_fig('11_tier_dist.png')
 print('Chart 11 done.')
 """))
 
@@ -302,18 +309,18 @@ print('Chart 12 done.')
 # ── Chart 13: Performance Scatter ─────────────────────────────────────────────
 cells.append(md_cell("## Chart 13 — Risk vs Return Scatter (Latest Year)"))
 cells.append(code_cell("""\
-latest_yr = perf_df['year'].max()
+latest_yr = 2026
 # perf_df already has 'category'; only bring in scheme_name
-perf_latest = perf_df[perf_df.year == latest_yr].merge(fund_df[['fund_id','scheme_name']], on='fund_id')
+perf_latest = perf_df.copy()
 
 fig, ax = plt.subplots(figsize=(10, 6))
 cats = perf_latest['category'].unique()
 palette = sns.color_palette('Set1', len(cats))
 for cat, col in zip(cats, palette):
     sub = perf_latest[perf_latest.category == cat]
-    ax.scatter(sub['std_dev'], sub['return_1y_pct'], s=120, c=[col], label=cat, alpha=0.8)
+    ax.scatter(sub['std_dev_ann_pct'], sub['return_1yr_pct'], s=120, c=[col], label=cat, alpha=0.8)
     for _, row in sub.iterrows():
-        ax.annotate(row['fund_id'], (row['std_dev'], row['return_1y_pct']),
+        ax.annotate(row['fund_id'], (row['std_dev_ann_pct'], row['return_1yr_pct']),
                     textcoords='offset points', xytext=(5,3), fontsize=7)
 ax.axhline(0, color='gray', linestyle='--', lw=0.8)
 ax.set_title(f'Risk vs Return – {latest_yr}', fontsize=13)
@@ -324,23 +331,26 @@ save_fig('13_risk_return_scatter.png')
 print('Chart 13 done.')
 """))
 
-# ── Chart 14: SIP Continuity – Instalments Distribution ──────────────────────
-cells.append(md_cell("## Chart 14 — SIP Continuity: Instalments Completed"))
+# ── Chart 14: SIP Accounts Growth ──────────────────────────────────────────
+cells.append(md_cell("## Chart 14 — SIP Accounts Growth"))
 cells.append(code_cell("""\
+sip_df['month_dt'] = pd.to_datetime(sip_df['month'] + '-01')
+sip_df = sip_df.sort_values('month_dt')
+
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-axes[0].hist(sip_df['total_instalments_completed'], bins=24,
-             color='mediumseagreen', edgecolor='white')
-axes[0].set_title('Distribution of SIP Instalments Completed')
-axes[0].set_xlabel('Instalments')
-axes[0].set_ylabel('Count')
+axes[0].plot(sip_df['month_dt'], sip_df['active_sip_accounts_crore'], 
+             color='mediumseagreen', lw=2, marker='o')
+axes[0].set_title('Active SIP Accounts (Crore)')
+axes[0].set_xlabel('Month')
+axes[0].set_ylabel('Accounts (Cr)')
 
-status_counts = sip_df['status'].value_counts()
-axes[1].pie(status_counts.values, labels=status_counts.index,
-            autopct='%1.1f%%', startangle=90,
-            colors=sns.color_palette('Set3', len(status_counts)))
-axes[1].set_title('SIP Status Breakdown')
+axes[1].plot(sip_df['month_dt'], sip_df['new_sip_accounts_lakh'], 
+             color='orange', lw=2, marker='s')
+axes[1].set_title('New SIP Accounts (Lakh)')
+axes[1].set_xlabel('Month')
+axes[1].set_ylabel('Accounts (Lakh)')
 
-plt.suptitle('SIP Register Analysis', fontsize=14)
+plt.suptitle('SIP Accounts Analysis', fontsize=14)
 plt.tight_layout()
 save_fig('14_sip_continuity.png')
 print('Chart 14 done.')
@@ -349,16 +359,16 @@ print('Chart 14 done.')
 # ── Chart 15: Benchmark vs Fund returns bar chart ─────────────────────────────
 cells.append(md_cell("## Chart 15 — Fund Alpha vs Benchmark (Latest Year)"))
 cells.append(code_cell("""\
-latest_yr = perf_df['year'].max()
+latest_yr = 2026
 # perf_df already has 'category'; merge only scheme_name from fund_df
-perf_bar = perf_df[perf_df.year == latest_yr].merge(fund_df[['fund_id','scheme_name']], on='fund_id')
+perf_bar = perf_df.copy()
 perf_latest = perf_bar.copy()  # keep for chart 13
 
 fig, ax = plt.subplots(figsize=(13, 6))
 x = np.arange(len(perf_bar))
 width = 0.35
-ax.bar(x - width/2, perf_bar['return_1y_pct'], width, label='Fund Return', color='steelblue')
-ax.bar(x + width/2, perf_bar['benchmark_return_pct'], width, label='Benchmark Return', color='orange')
+ax.bar(x - width/2, perf_bar['return_1yr_pct'], width, label='Fund Return', color='steelblue')
+ax.bar(x + width/2, perf_bar['benchmark_3yr_pct'], width, label='Benchmark Return', color='orange')
 ax.set_xticks(x)
 ax.set_xticklabels([n[:20] for n in perf_bar['scheme_name']], rotation=35, ha='right', fontsize=8)
 ax.set_title(f'Fund vs Benchmark Returns – {latest_yr}', fontsize=13)

@@ -1,20 +1,10 @@
 """
 compute_metrics.py
 ------------------
-Computes fund performance metrics:
-  - CAGR (1Y, 3Y, 5Y from NAV)
-  - Sharpe Ratio (Rf = 6.5%)
-  - Sortino Ratio
-  - Alpha / Beta (OLS vs benchmark)
-  - Maximum Drawdown
-  - Weighted composite scorecard
-
-Outputs:
-  data/processed/fund_scorecard.csv
-  data/processed/alpha_beta.csv
-  reports/charts/16_scorecard_heatmap.png
-  reports/charts/17_max_drawdown.png
-  reports/charts/18_tracking_error.png
+Computes performance metrics from real dataset.
+Primary source: fact_performance (pre-computed alpha/beta/sharpe from real data),
+supplemented with NAV-derived CAGR, max-drawdown, volatility.
+Outputs fund_scorecard.csv and alpha_beta.csv with real fund names.
 """
 
 import warnings
@@ -22,250 +12,165 @@ import sqlite3
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy import stats
 from pathlib import Path
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 DB      = Path("data/db/bluestock_mf.db")
 PROC    = Path("data/processed")
 CHARTS  = Path("reports/charts")
 CHARTS.mkdir(parents=True, exist_ok=True)
 
-RF_ANNUAL = 0.065   # Risk-free rate 6.5%
+RF_ANNUAL = 0.065
 RF_DAILY  = RF_ANNUAL / 252
 
 conn = sqlite3.connect(DB)
-
-nav_df  = pd.read_sql("SELECT * FROM fact_nav",    conn, parse_dates=["date"])
-fund_df = pd.read_sql("SELECT * FROM dim_fund",    conn)
-bm_df   = pd.read_sql("SELECT * FROM fact_benchmark", conn, parse_dates=["date"])
+nav_df   = pd.read_sql("SELECT * FROM fact_nav",         conn, parse_dates=["date"])
+perf_df  = pd.read_sql("SELECT * FROM fact_performance", conn)
+fund_df  = pd.read_sql("SELECT * FROM dim_fund",         conn)
+bm_df    = pd.read_sql("SELECT * FROM fact_benchmark",   conn, parse_dates=["date"])
 conn.close()
 
-# ── Pivot NAV to wide ──────────────────────────────────────────────────────────
-nav_pivot = nav_df.pivot_table(index="date", columns="fund_id", values="nav").sort_index()
-ret_pivot = nav_pivot.pct_change().dropna(how="all")   # daily returns
+nav_pivot  = nav_df.pivot_table(index="date", columns="amfi_code", values="nav").sort_index()
+ret_pivot  = nav_pivot.pct_change().dropna(how="all")
 
-# ── Benchmark daily returns (Nifty 100) ───────────────────────────────────────
-nifty_ret = (bm_df[bm_df["benchmark"] == "Nifty 100"]
-             .set_index("date")["daily_return_pct"] / 100).sort_index()
-nifty_ret.index = pd.to_datetime(nifty_ret.index)
+nifty50 = (bm_df[bm_df["index_name"] == "NIFTY50"]
+           .set_index("date")["close_value"]
+           .pct_change().dropna())
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helper functions
-# ─────────────────────────────────────────────────────────────────────────────
-def cagr(nav_series: pd.Series, years: float) -> float:
-    """Compute CAGR over `years` years."""
-    if len(nav_series) < 2:
-        return np.nan
-    start = nav_series.dropna().iloc[0]
-    end   = nav_series.dropna().iloc[-1]
-    if start <= 0:
-        return np.nan
-    return (end / start) ** (1 / years) - 1
+def cagr(nav_series, years):
+    s = nav_series.dropna()
+    if len(s) < 2 or years <= 0: return np.nan
+    return (s.iloc[-1] / s.iloc[0]) ** (1 / years) - 1
 
 
-def sharpe(ret_series: pd.Series) -> float:
-    """Annualised Sharpe ratio."""
-    excess = ret_series - RF_DAILY
-    if excess.std() == 0:
-        return np.nan
-    return float((excess.mean() / excess.std()) * np.sqrt(252))
+def max_drawdown(nav_series):
+    s = nav_series.dropna()
+    peak = s.expanding().max()
+    return float(((s - peak) / peak).min())
 
 
-def sortino(ret_series: pd.Series) -> float:
-    """Annualised Sortino ratio (downside deviation only)."""
-    excess   = ret_series - RF_DAILY
-    downside = excess[excess < 0]
-    if len(downside) == 0 or downside.std() == 0:
-        return np.nan
-    return float((excess.mean() / downside.std()) * np.sqrt(252))
+def volatility(ret_series):
+    return float(ret_series.dropna().std() * np.sqrt(252))
 
 
-def max_drawdown(nav_series: pd.Series) -> float:
-    """Maximum peak-to-trough drawdown."""
-    nav = nav_series.dropna()
-    peak = nav.expanding().max()
-    dd   = (nav - peak) / peak
-    return float(dd.min())
-
-
-def alpha_beta_ols(fund_ret: pd.Series, bm_ret: pd.Series) -> tuple[float, float, float]:
-    """OLS regression: fund_ret = alpha + beta * bm_ret. Returns (alpha_ann, beta, r2)."""
+def tracking_error(fund_ret, bm_ret):
     common = fund_ret.dropna().index.intersection(bm_ret.dropna().index)
-    if len(common) < 30:
-        return np.nan, np.nan, np.nan
-    x = bm_ret.loc[common].values
-    y = fund_ret.loc[common].values
-    slope, intercept, r, _, _ = stats.linregress(x, y)
-    alpha_ann = intercept * 252
-    return round(float(alpha_ann), 4), round(float(slope), 4), round(float(r**2), 4)
+    if len(common) < 10: return np.nan
+    return float((fund_ret.loc[common] - bm_ret.loc[common]).std() * np.sqrt(252))
 
 
-def tracking_error(fund_ret: pd.Series, bm_ret: pd.Series) -> float:
-    """Annualised tracking error."""
-    common = fund_ret.dropna().index.intersection(bm_ret.dropna().index)
-    if len(common) < 10:
-        return np.nan
-    diff = fund_ret.loc[common] - bm_ret.loc[common]
-    return float(diff.std() * np.sqrt(252))
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Compute all metrics
-# ─────────────────────────────────────────────────────────────────────────────
-print("Computing performance metrics …")
-
-metrics_rows = []
-ab_rows      = []
-
-for fid in nav_pivot.columns:
-    nav_s = nav_pivot[fid].dropna()
-    ret_s = ret_pivot[fid].dropna() if fid in ret_pivot.columns else pd.Series(dtype=float)
-
-    total_years = (nav_s.index[-1] - nav_s.index[0]).days / 365.25 if len(nav_s) > 1 else 0
-
-    # CAGR
-    cagr_full = cagr(nav_s, total_years) if total_years > 0 else np.nan
-    nav_1y = nav_s[nav_s.index >= nav_s.index[-1] - pd.DateOffset(years=1)]
-    nav_3y = nav_s[nav_s.index >= nav_s.index[-1] - pd.DateOffset(years=3)]
-    cagr_1y = cagr(nav_1y, 1)   if len(nav_1y) > 5 else np.nan
-    cagr_3y = cagr(nav_3y, 3)   if len(nav_3y) > 5 else np.nan
-
-    # Risk metrics
-    sh  = sharpe(ret_s)
-    so  = sortino(ret_s)
-    mdd = max_drawdown(nav_s)
-    vol = float(ret_s.std() * np.sqrt(252)) if len(ret_s) > 1 else np.nan
-    te  = tracking_error(ret_s, nifty_ret)
-
-    # Alpha / Beta
-    alpha, beta, r2 = alpha_beta_ols(ret_s, nifty_ret)
-
-    row = {
-        "fund_id":       fid,
-        "cagr_full_pct": round(cagr_full * 100, 2) if not np.isnan(cagr_full) else np.nan,
-        "cagr_1y_pct":   round(cagr_1y   * 100, 2) if not np.isnan(cagr_1y)   else np.nan,
-        "cagr_3y_pct":   round(cagr_3y   * 100, 2) if not np.isnan(cagr_3y)   else np.nan,
-        "sharpe":        round(sh,  3) if not np.isnan(sh)  else np.nan,
-        "sortino":       round(so,  3) if not np.isnan(so)  else np.nan,
-        "max_drawdown_pct": round(mdd * 100, 2) if not np.isnan(mdd) else np.nan,
-        "volatility_ann_pct": round(vol * 100, 2) if not np.isnan(vol) else np.nan,
-        "tracking_error": round(te, 4) if not np.isnan(te) else np.nan,
-    }
-    metrics_rows.append(row)
-
-    ab_rows.append({
-        "fund_id":    fid,
-        "alpha_ann":  alpha,
-        "beta":       beta,
-        "r_squared":  r2,
+print("Computing NAV-derived metrics …")
+nav_rows = []
+for code in nav_pivot.columns:
+    s = nav_pivot[code].dropna()
+    r = ret_pivot[code].dropna() if code in ret_pivot.columns else pd.Series(dtype=float)
+    total_yrs = (s.index[-1] - s.index[0]).days / 365.25 if len(s) > 1 else 0
+    nav_1y = s[s.index >= s.index[-1] - pd.DateOffset(years=1)]
+    nav_3y = s[s.index >= s.index[-1] - pd.DateOffset(years=3)]
+    nav_rows.append({
+        "amfi_code":       code,
+        "cagr_full_pct":   round(cagr(s,  total_yrs) * 100, 2) if total_yrs > 0 else np.nan,
+        "cagr_1y_nav_pct": round(cagr(nav_1y, 1)     * 100, 2) if len(nav_1y) > 5 else np.nan,
+        "cagr_3y_nav_pct": round(cagr(nav_3y, 3)     * 100, 2) if len(nav_3y) > 5 else np.nan,
+        "max_drawdown_nav_pct": round(max_drawdown(s) * 100, 2),
+        "volatility_ann_pct":  round(volatility(r)   * 100, 2) if len(r) > 5 else np.nan,
+        "tracking_error":      round(tracking_error(r, nifty50), 4),
     })
+nav_metrics = pd.DataFrame(nav_rows)
 
-metrics_df = pd.DataFrame(metrics_rows).merge(fund_df[["fund_id","scheme_name","category"]], on="fund_id")
-ab_df      = pd.DataFrame(ab_rows).merge(fund_df[["fund_id","scheme_name","category"]], on="fund_id")
+# Merge with pre-computed real performance data
+# Use return_1yr_pct, sharpe_ratio, sortino_ratio, alpha, beta from real dataset
+perf_latest = perf_df.drop_duplicates(subset=["amfi_code"])
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Composite Scorecard
-# ─────────────────────────────────────────────────────────────────────────────
-# Weights: CAGR_1Y 30%, Sharpe 25%, Sortino 20%, Max DD 15% (inverted), Alpha 10%
-def rank_col(series, ascending=True):
-    """Rank 1=best. ascending=True → lower value is better."""
-    return series.rank(ascending=ascending, method="min")
+merged = (perf_latest
+          .merge(nav_metrics, on="amfi_code", how="left"))
 
-sc = metrics_df.copy()
-sc["r_cagr_1y"]  = rank_col(sc["cagr_1y_pct"],      ascending=False)
-sc["r_sharpe"]   = rank_col(sc["sharpe"],            ascending=False)
-sc["r_sortino"]  = rank_col(sc["sortino"],           ascending=False)
-sc["r_mdd"]      = rank_col(sc["max_drawdown_pct"],  ascending=True)   # less negative = better
-ab_merged = sc.merge(ab_df[["fund_id","alpha_ann"]], on="fund_id")
-ab_merged["r_alpha"] = rank_col(ab_merged["alpha_ann"], ascending=False)
+# Composite Scorecard (weights: return 30%, sharpe 25%, sortino 20%, drawdown 15%, alpha 10%)
+def rank_col(s, asc=True): return s.rank(ascending=asc, method="min")
 
-ab_merged["composite_score"] = (
-    0.30 * (11 - ab_merged["r_cagr_1y"]) +
-    0.25 * (11 - ab_merged["r_sharpe"])  +
-    0.20 * (11 - ab_merged["r_sortino"]) +
-    0.15 * (11 - ab_merged["r_mdd"])     +
-    0.10 * (11 - ab_merged["r_alpha"])
-)
-ab_merged["composite_score"] = ab_merged["composite_score"].round(2)
-ab_merged["overall_rank"]    = ab_merged["composite_score"].rank(ascending=False, method="min").astype(int)
+merged["r_ret"]    = rank_col(merged["return_1yr_pct"], asc=False)
+merged["r_sharpe"] = rank_col(merged["sharpe_ratio"],   asc=False)
+merged["r_sortino"]= rank_col(merged["sortino_ratio"],  asc=False)
+merged["r_dd"]     = rank_col(merged["max_drawdown_pct"], asc=False)  # less negative = better
+merged["r_alpha"]  = rank_col(merged["alpha"],          asc=False)
+N = len(merged)
+merged["composite_score"] = (
+    0.30 * (N + 1 - merged["r_ret"])    +
+    0.25 * (N + 1 - merged["r_sharpe"]) +
+    0.20 * (N + 1 - merged["r_sortino"])+
+    0.15 * (N + 1 - merged["r_dd"])     +
+    0.10 * (N + 1 - merged["r_alpha"])
+).round(2)
+merged["overall_rank"] = merged["composite_score"].rank(ascending=False, method="min").astype(int)
+merged = merged.sort_values("overall_rank")
 
-scorecard = ab_merged.sort_values("overall_rank")
-scorecard_cols = ["overall_rank","fund_id","scheme_name","category",
-                  "cagr_1y_pct","cagr_3y_pct","sharpe","sortino",
-                  "max_drawdown_pct","volatility_ann_pct","alpha_ann","composite_score"]
-scorecard[scorecard_cols].to_csv(PROC / "fund_scorecard.csv", index=False)
-ab_df.to_csv(PROC / "alpha_beta.csv", index=False)
-print(f"  ✔ fund_scorecard.csv saved  ({len(scorecard)} rows)")
-print(f"  ✔ alpha_beta.csv saved  ({len(ab_df)} rows)")
+# Scorecard
+sc_cols = ["overall_rank","amfi_code","scheme_name","fund_house","category","plan",
+           "return_1yr_pct","return_3yr_pct","return_5yr_pct",
+           "sharpe_ratio","sortino_ratio","max_drawdown_pct",
+           "std_dev_ann_pct","aum_crore","alpha","composite_score"]
+scorecard = merged[sc_cols].copy()
+scorecard.to_csv(PROC / "fund_scorecard.csv", index=False)
 
-print("\n--- Fund Scorecard ---")
-print(scorecard[["overall_rank","fund_id","scheme_name","cagr_1y_pct","sharpe","sortino",
-                  "max_drawdown_pct","composite_score"]].to_string(index=False))
+# Alpha / Beta
+ab_cols = ["amfi_code","scheme_name","fund_house","category","alpha","beta",
+           "sharpe_ratio","sortino_ratio","morningstar_rating","risk_grade"]
+alpha_beta = merged[ab_cols].copy()
+alpha_beta.to_csv(PROC / "alpha_beta.csv", index=False)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Chart 16: Scorecard Heatmap
-# ─────────────────────────────────────────────────────────────────────────────
-heat_cols = ["cagr_1y_pct","cagr_3y_pct","sharpe","sortino","max_drawdown_pct","volatility_ann_pct"]
-heat_data = scorecard.set_index("fund_id")[heat_cols]
+print(f"\n--- Fund Scorecard (Top 10) ---")
+print(scorecard[["overall_rank","scheme_name","return_1yr_pct","sharpe_ratio",
+                  "max_drawdown_pct","composite_score"]].head(10).to_string(index=False))
 
-fig, ax = plt.subplots(figsize=(12, 6))
-sns.heatmap(heat_data.T, annot=True, fmt=".2f", cmap="RdYlGn",
-            linewidths=0.5, ax=ax, center=0)
-ax.set_title("Fund Performance Scorecard Heatmap", fontsize=13)
-ax.set_xlabel("Fund ID")
-ax.set_ylabel("Metric")
+# ── Chart 16: Scorecard Heatmap ───────────────────────────────────────────────
+heat_cols = ["return_1yr_pct","return_3yr_pct","sharpe_ratio","sortino_ratio","max_drawdown_pct"]
+heat = scorecard.set_index("amfi_code")[heat_cols]
+fig, ax = plt.subplots(figsize=(12, 10))
+sns.heatmap(heat.T, annot=True, fmt=".2f", cmap="RdYlGn",
+            linewidths=0.4, ax=ax, center=0,
+            yticklabels=heat_cols,
+            xticklabels=[str(c) for c in heat.index])
+ax.set_title("Fund Performance Scorecard Heatmap (Real Data)", fontsize=13)
 plt.tight_layout()
 plt.savefig(CHARTS / "16_scorecard_heatmap.png", dpi=150, bbox_inches="tight")
 plt.close()
-print("  Chart 16 saved.")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Chart 17: Max Drawdown
-# ─────────────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(11, 5))
-colors = ["crimson" if v < -20 else "darkorange" if v < -10 else "steelblue"
+# ── Chart 17: Max Drawdown ────────────────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(12, 6))
+colors = ["crimson" if v < -25 else "darkorange" if v < -15 else "steelblue"
           for v in scorecard["max_drawdown_pct"]]
-bars = ax.barh(scorecard["fund_id"], scorecard["max_drawdown_pct"], color=colors)
-ax.set_title("Maximum Drawdown by Fund (%)", fontsize=13)
+ax.barh([s[:35] for s in scorecard["scheme_name"]], scorecard["max_drawdown_pct"], color=colors)
+ax.set_title("Maximum Drawdown by Scheme (Real Data)", fontsize=13)
 ax.set_xlabel("Max Drawdown (%)")
-ax.axvline(0, color="black", lw=0.5)
-for bar, val in zip(bars, scorecard["max_drawdown_pct"]):
-    ax.text(val - 0.5, bar.get_y() + bar.get_height()/2,
-            f"{val:.1f}%", va="center", ha="right", fontsize=8, color="white")
 plt.tight_layout()
 plt.savefig(CHARTS / "17_max_drawdown.png", dpi=150, bbox_inches="tight")
 plt.close()
-print("  Chart 17 saved.")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Chart 18: Tracking Error vs Alpha
-# ─────────────────────────────────────────────────────────────────────────────
-te_data = scorecard.copy()
-# alpha_ann already present in scorecard from the ab_merged join above
-# add beta from ab_df
-te_data = te_data.merge(ab_df[["fund_id","beta"]], on="fund_id")
-fig, ax = plt.subplots(figsize=(9, 6))
-ax.scatter(te_data["tracking_error"], te_data["alpha_ann"] * 100,
-           s=100, c="steelblue", alpha=0.8, edgecolors="white", linewidth=0.8)
-for _, r in te_data.iterrows():
-    ax.annotate(r["fund_id"], (r["tracking_error"], r["alpha_ann"]*100),
-                textcoords="offset points", xytext=(5, 3), fontsize=8)
+# ── Chart 18: Alpha vs Tracking Error ────────────────────────────────────────
+te_data = merged[["scheme_name","alpha","tracking_error","category"]].dropna()
+fig, ax = plt.subplots(figsize=(10, 6))
+cats = te_data["category"].unique()
+palette = sns.color_palette("Set1", len(cats))
+for cat, col in zip(cats, palette):
+    sub = te_data[te_data.category == cat]
+    ax.scatter(sub["tracking_error"], sub["alpha"], s=90, c=[col], label=cat, alpha=0.8)
 ax.axhline(0, color="gray", linestyle="--", lw=0.8)
-ax.set_title("Tracking Error vs Alpha (Active Risk vs Active Return)", fontsize=13)
-ax.set_xlabel("Tracking Error (annualised)")
-ax.set_ylabel("Alpha (% per year)")
+ax.set_title("Alpha vs Tracking Error (Real Data)", fontsize=13)
+ax.set_xlabel("Tracking Error (ann.)")
+ax.set_ylabel("Alpha")
+ax.legend()
 plt.tight_layout()
 plt.savefig(CHARTS / "18_tracking_error.png", dpi=150, bbox_inches="tight")
 plt.close()
-print("  Chart 18 saved.")
 
-# assertions
-assert (PROC / "fund_scorecard.csv").exists(), "fund_scorecard.csv not found"
-assert (PROC / "alpha_beta.csv").exists(),     "alpha_beta.csv not found"
-print("\n✅ Performance metrics complete. All assertions passed.")
+assert (PROC / "fund_scorecard.csv").exists()
+assert (PROC / "alpha_beta.csv").exists()
+assert scorecard["fund_house"].str.contains("SBI|HDFC").any(), \
+    "Real fund names not in scorecard!"
+print(f"\n✅ fund_scorecard.csv and alpha_beta.csv saved with real fund names.")
+print("✅ Charts 16–18 saved.")

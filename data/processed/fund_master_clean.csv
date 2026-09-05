@@ -1,11 +1,41 @@
-fund_id,scheme_name,amfi_code,category,sub_category,amc,benchmark,expense_ratio,launch_date,fund_manager,aum_cr,exit_load_pct,lock_in_days
-F001,Bluestock Large Cap Fund,119598,Equity,Large Cap,Bluestock AMC,Nifty 100,1.44,2014-11-27,Rajesh Kumar,19090.78,0.5,0
-F002,Bluestock Mid Cap Opportunities,120503,Equity,Mid Cap,Bluestock AMC,Nifty Midcap 150,0.83,2015-03-21,Priya Mehta,4411.65,0.5,0
-F003,Bluestock Flexi Cap Fund,118825,Equity,Flexi Cap,Bluestock AMC,Nifty 500,1.08,2021-05-02,Amit Shah,10854.05,0.5,0
-F004,Bluestock Short Duration Debt,119270,Debt,Short Duration,Bluestock AMC,Crisil ST Bond,0.37,2010-08-06,Sunita Rao,7307.85,0.5,0
-F005,Bluestock Liquid Fund,120465,Debt,Liquid,Bluestock AMC,Crisil Liquid,0.66,2014-06-17,Vikram Nair,5775.19,0.5,0
-F006,Bluestock Hybrid Aggressive,119801,Hybrid,Aggressive Hybrid,Bluestock AMC,Nifty 50 Hybrid,1.28,2019-05-30,Deepa Iyer,19205.61,0.5,0
-F007,Horizon Bluechip Fund,135781,Equity,Large Cap,Horizon MF,Nifty 100,1.69,2014-12-11,Arjun Patel,3004.15,0.5,0
-F008,Pinnacle Small Cap Fund,148742,Equity,Small Cap,Pinnacle MF,Nifty Smallcap 250,0.89,2020-01-28,Neha Gupta,9808.22,0.5,0
-F009,Apex Balanced Advantage,152341,Hybrid,Balanced Advantage,Apex MF,Nifty 50 Hybrid,1.02,2016-03-28,Rahul Verma,9294.99,0.5,0
-F010,Summit Gilt Fund,163209,Debt,Gilt,Summit MF,Crisil Gilt,0.27,2010-02-23,Meera Joshi,8926.92,0.5,0
+amfi_code,fund_house,scheme_name,category,sub_category,plan,launch_date,benchmark,expense_ratio_pct,exit_load_pct,min_sip_amount,min_lumpsum_amount,fund_manager,risk_category,sebi_category_code,expense_ratio_flagged
+119551,SBI Mutual Fund,SBI Bluechip Fund - Regular Plan - Growth,Equity,Large Cap,Regular,2006-02-14,NIFTY 100 TRI,1.54,1.0,500,1000,Sohini Andani,Moderate,EC01,False
+119552,SBI Mutual Fund,SBI Bluechip Fund - Direct Plan - Growth,Equity,Large Cap,Direct,2013-01-01,NIFTY 100 TRI,0.66,1.0,500,1000,Sohini Andani,Moderate,EC01,False
+119598,SBI Mutual Fund,SBI Small Cap Fund - Regular Plan - Growth,Equity,Small Cap,Regular,2009-09-09,BSE 250 SmallCap TRI,1.43,1.0,500,1000,R. Srinivasan,Very High,EC03,False
+119599,SBI Mutual Fund,SBI Small Cap Fund - Direct Plan - Growth,Equity,Small Cap,Direct,2013-01-01,BSE 250 SmallCap TRI,0.72,1.0,500,1000,R. Srinivasan,Very High,EC03,False
+119120,SBI Mutual Fund,SBI Magnum Gilt Fund - Regular Plan - Growth,Debt,Gilt,Regular,2000-12-30,CRISIL Dynamic Gilt Index,0.77,0.0,500,1000,Dinesh Ahuja,Low,DC02,False
+100016,HDFC Mutual Fund,HDFC Top 100 Fund - Regular Plan - Growth,Equity,Large Cap,Regular,1996-09-11,NIFTY 100 TRI,1.55,1.0,500,1000,Rahul Baijal,Moderate,EC01,False
+125497,HDFC Mutual Fund,HDFC Top 100 Fund - Direct Plan - Growth,Equity,Large Cap,Direct,2013-01-01,NIFTY 100 TRI,0.92,1.0,500,1000,Rahul Baijal,Moderate,EC01,False
+100033,HDFC Mutual Fund,HDFC Mid-Cap Opportunities Fund - Regular - Growth,Equity,Mid Cap,Regular,2007-06-25,NIFTY Midcap 150 TRI,1.38,1.0,500,1000,Chirag Setalvad,High,EC02,False
+125498,HDFC Mutual Fund,HDFC Mid-Cap Opportunities Fund - Direct - Growth,Equity,Mid Cap,Direct,2013-01-01,NIFTY Midcap 150 TRI,0.78,1.0,500,1000,Chirag Setalvad,High,EC02,False
+100025,HDFC Mutual Fund,HDFC Short Term Debt Fund - Regular - Growth,Debt,Short Duration,Regular,2002-06-25,CRISIL Short Term Bond Index,0.56,0.5,500,1000,Anil Bamboli,Low,DC02,False
+120503,ICICI Prudential MF,ICICI Pru Bluechip Fund - Regular - Growth,Equity,Large Cap,Regular,2008-05-23,NIFTY 100 TRI,1.42,1.0,500,1000,Anish Tawakley,Moderate,EC01,False
+120504,ICICI Prudential MF,ICICI Pru Bluechip Fund - Direct - Growth,Equity,Large Cap,Direct,2013-01-01,NIFTY 100 TRI,0.8,1.0,500,1000,Anish Tawakley,Moderate,EC01,False
+120505,ICICI Prudential MF,ICICI Pru Midcap Fund - Regular - Growth,Equity,Mid Cap,Regular,2004-10-28,NIFTY Midcap 150 TRI,1.36,1.0,500,1000,Sankaran Naren,High,EC02,False
+120506,ICICI Prudential MF,ICICI Pru Value Discovery Fund - Regular - Growth,Equity,Value,Regular,2004-08-16,NIFTY 500 TRI,1.41,1.0,500,1000,Sankaran Naren,Moderately High,EC06,False
+120507,ICICI Prudential MF,ICICI Pru Liquid Fund - Regular - Growth,Debt,Liquid,Regular,2001-11-17,CRISIL Liquid Fund AI Index,0.74,0.0,500,5000,Rahul Goswami,Low,DC01,False
+118632,Nippon India MF,Nippon India Large Cap Fund - Regular - Growth,Equity,Large Cap,Regular,2004-08-08,NIFTY 100 TRI,1.51,1.0,500,1000,Sailesh Raj Bhan,Moderate,EC01,False
+118633,Nippon India MF,Nippon India Large Cap Fund - Direct - Growth,Equity,Large Cap,Direct,2013-01-01,NIFTY 100 TRI,0.72,1.0,500,1000,Sailesh Raj Bhan,Moderate,EC01,False
+118634,Nippon India MF,Nippon India Small Cap Fund - Regular - Growth,Equity,Small Cap,Regular,2010-09-16,BSE 250 SmallCap TRI,1.53,1.0,500,1000,Samir Rachh,Very High,EC03,False
+118635,Nippon India MF,Nippon India ETF Nifty 50 BeES,Equity,Index/ETF,Direct,2001-12-28,NIFTY 50 TRI,0.89,0.0,500,100,Vishal Jain,Moderate,EI01,False
+118636,Nippon India MF,Nippon India Gilt Securities Fund - Regular - Growth,Debt,Gilt,Regular,1999-08-19,CRISIL Dynamic Gilt Index,0.55,0.0,500,1000,Vivek Sharma,Low,DC02,False
+120841,Kotak Mahindra MF,Kotak Bluechip Fund - Regular - Growth,Equity,Large Cap,Regular,2005-12-29,NIFTY 100 TRI,1.59,1.0,500,1000,Harsha Upadhyaya,Moderate,EC01,False
+120842,Kotak Mahindra MF,Kotak Emerging Equity Fund - Regular - Growth,Equity,Mid Cap,Regular,2007-03-30,NIFTY Midcap 150 TRI,1.56,1.0,500,1000,Pankaj Tibrewal,High,EC02,False
+120843,Kotak Mahindra MF,Kotak Flexicap Fund - Regular - Growth,Equity,Flexi Cap,Regular,2009-08-11,NIFTY 500 TRI,1.45,1.0,500,1000,Pankaj Tibrewal,Moderately High,EC04,False
+120844,Kotak Mahindra MF,Kotak Liquid Fund - Regular - Growth,Debt,Liquid,Regular,2004-03-03,CRISIL Liquid Fund AI Index,0.6,0.0,500,5000,Deepak Agrawal,Low,DC01,False
+119092,Axis Mutual Fund,Axis Bluechip Fund - Regular - Growth,Equity,Large Cap,Regular,2010-01-05,NIFTY 100 TRI,1.64,1.0,500,1000,Shreyash Devalkar,Moderate,EC01,False
+119093,Axis Mutual Fund,Axis Bluechip Fund - Direct - Growth,Equity,Large Cap,Direct,2013-01-01,NIFTY 100 TRI,0.75,1.0,500,1000,Shreyash Devalkar,Moderate,EC01,False
+119094,Axis Mutual Fund,Axis Midcap Fund - Regular - Growth,Equity,Mid Cap,Regular,2011-02-18,NIFTY Midcap 50 TRI,1.38,1.0,500,1000,Jinesh Gopani,High,EC02,False
+119095,Axis Mutual Fund,Axis Small Cap Fund - Regular - Growth,Equity,Small Cap,Regular,2013-11-29,BSE 250 SmallCap TRI,1.38,1.0,500,1000,Anupam Tiwari,Very High,EC03,False
+101206,Aditya Birla Sun Life MF,ABSL Frontline Equity Fund - Regular - Growth,Equity,Large Cap,Regular,2002-08-30,NIFTY 100 TRI,1.6,1.0,500,1000,Mahesh Patil,Moderate,EC01,False
+101207,Aditya Birla Sun Life MF,ABSL Small Cap Fund - Regular - Growth,Equity,Small Cap,Regular,2007-05-31,BSE 250 SmallCap TRI,1.53,1.0,500,1000,Mircea Ciobanu,Very High,EC03,False
+101208,Aditya Birla Sun Life MF,ABSL Liquid Fund - Regular - Growth,Debt,Liquid,Regular,2000-04-17,CRISIL Liquid Fund AI Index,0.79,0.0,500,5000,Maneesh Dangi,Low,DC01,False
+102885,UTI Mutual Fund,UTI Nifty 50 Index Fund - Regular - Growth,Equity,Index,Regular,2000-03-06,NIFTY 50 TRI,1.57,0.0,500,1000,Sharwan Kumar Goyal,Moderate,EI01,False
+102886,UTI Mutual Fund,UTI Mid Cap Fund - Regular - Growth,Equity,Mid Cap,Regular,2004-04-07,NIFTY Midcap 150 TRI,1.51,1.0,500,1000,V Srivatsa,High,EC02,False
+102887,UTI Mutual Fund,UTI Flexi Cap Fund - Regular - Growth,Equity,Flexi Cap,Regular,2005-05-18,NIFTY 500 TRI,1.64,1.0,500,1000,Ajay Tyagi,Moderately High,EC04,False
+148567,Mirae Asset MF,Mirae Asset Large Cap Fund - Regular - Growth,Equity,Large Cap,Regular,2008-04-04,NIFTY 100 TRI,1.46,1.0,500,1000,Gaurav Misra,Moderate,EC01,False
+148568,Mirae Asset MF,Mirae Asset Emerging Bluechip Fund - Regular - Growth,Equity,Large & Mid Cap,Regular,2010-07-09,NIFTY Large Midcap 250 TRI,1.52,1.0,500,1000,Neelesh Surana,Moderately High,EC04,False
+148569,Mirae Asset MF,Mirae Asset Tax Saver Fund - Regular - Growth,Equity,ELSS,Regular,2015-12-28,NIFTY 500 TRI,1.6,1.0,500,1000,Neelesh Surana,High,EC05,False
+149322,DSP Mutual Fund,DSP Top 100 Equity Fund - Regular - Growth,Equity,Large Cap,Regular,2003-03-10,NIFTY 100 TRI,1.54,1.0,500,1000,Apoorva Shah,Moderate,EC01,False
+149323,DSP Mutual Fund,DSP Midcap Fund - Regular - Growth,Equity,Mid Cap,Regular,2006-11-16,NIFTY Midcap 150 TRI,1.61,1.0,500,1000,Vinit Sambre,High,EC02,False
+149324,DSP Mutual Fund,DSP Small Cap Fund - Regular - Growth,Equity,Small Cap,Regular,2007-06-14,BSE 250 SmallCap TRI,1.52,1.0,500,1000,Vinit Sambre,Very High,EC03,False
