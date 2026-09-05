@@ -144,7 +144,58 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace \
 
 ---
 
-## Notes
+## Results Summary
+
+### Top-Performing Funds
+
+| Rank | Fund | Category | CAGR 1Y | Sharpe | Max Drawdown | Score |
+|------|------|----------|---------|--------|--------------|-------|
+| 1 | Bluestock Large Cap Fund (F001) | Equity | 47.8% | 0.775 | -27.3% | 9.70 |
+| 2 | Horizon Bluechip Fund (F007) | Equity | 36.3% | 0.484 | -30.6% | 8.45 |
+| 3 | Bluestock Flexi Cap Fund (F003) | Equity | 17.1% | 0.341 | -35.3% | 7.75 |
+| 4 | Bluestock Mid Cap Opportunities (F002) | Equity | 7.3% | 0.625 | -19.5% | 7.05 |
+| 5 | Pinnacle Small Cap Fund (F008) | Equity | 8.7% | 0.321 | -26.3% | 6.45 |
+
+### Key Risk Metrics
+
+- **Total Industry AUM** (Aug 2026): ₹2,57,038 Cr
+- **Total SIP Inflows** (all-time): ₹8.0 Cr across 22,500+ SIP transactions
+- **Best Sharpe Ratio**: F001 at 0.775 (annualised, Rf=6.5%)
+- **Lowest Drawdown**: F010 Summit Gilt at -3.2% (debt fund)
+- **Worst Drawdown**: F003 Flexi Cap at -35.3%
+- **SIP Continuity**: 60%+ mandates rated Good/Excellent
+- **Dec 2025 SIP Milestone**: confirmed as highest monthly SIP inflow month
+- **VaR (95%, daily)**: Equity funds -1.5% to -2.1% | Debt funds -0.2% to -0.4%
+
+### Run the Streamlit Dashboard
+
+```bash
+cd /Users/tokanani/bluestock-mf-capstone
+python3 -m streamlit run dashboard/app.py
+```
+
+Open **http://localhost:8501** in your browser.
+
+**4 dashboard pages:**
+- 🏠 Industry Overview — KPI cards, AUM trend, fund house bar
+- 📈 Fund Performance — Risk/Return scatter, scorecard table, NAV vs benchmark
+- 👥 Investor Analytics — City bars, transaction donut, age-SIP analysis
+- 📅 SIP & Market Trends — Dual-axis SIP+Nifty chart, category heatmap
+
+### Final Deliverables
+
+| File | Location |
+|------|----------|
+| Final Report (PDF) | `reports/Final_Report.pdf` |
+| Presentation Deck (PPTX) | `reports/Bluestock_MF_Presentation.pptx` |
+| Dashboard Screenshots | `reports/dashboard_screenshots/` |
+| EDA Notebook | `notebooks/03_eda_analysis.ipynb` |
+| Advanced Analytics Notebook | `notebooks/05_advanced_analytics.ipynb` |
+| Fund Scorecard | `data/processed/fund_scorecard.csv` |
+| Alpha/Beta Results | `data/processed/alpha_beta.csv` |
+| 23 Analysis Charts | `reports/charts/*.png` |
+
+
 
 - The SQLite DB is excluded from Git (`.gitignore`). Re-run `load_db.py` after cloning.
 - Live NAV fetching falls back to synthetic values if the API is unreachable.
