@@ -1,0 +1,11 @@
+fund_id,scheme_name,amfi_code,category,sub_category,amc,benchmark,expense_ratio,launch_date,fund_manager,aum_cr,exit_load_pct,lock_in_days
+F001,Bluestock Large Cap Fund,119598,Equity,Large Cap,Bluestock AMC,Nifty 100,1.44,2014-11-27,Rajesh Kumar,19090.78,0.5,0
+F002,Bluestock Mid Cap Opportunities,120503,Equity,Mid Cap,Bluestock AMC,Nifty Midcap 150,0.83,2015-03-21,Priya Mehta,4411.65,0.5,0
+F003,Bluestock Flexi Cap Fund,118825,Equity,Flexi Cap,Bluestock AMC,Nifty 500,1.08,2021-05-02,Amit Shah,10854.05,0.5,0
+F004,Bluestock Short Duration Debt,119270,Debt,Short Duration,Bluestock AMC,Crisil ST Bond,0.37,2010-08-06,Sunita Rao,7307.85,0.5,0
+F005,Bluestock Liquid Fund,120465,Debt,Liquid,Bluestock AMC,Crisil Liquid,0.66,2014-06-17,Vikram Nair,5775.19,0.5,0
+F006,Bluestock Hybrid Aggressive,119801,Hybrid,Aggressive Hybrid,Bluestock AMC,Nifty 50 Hybrid,1.28,2019-05-30,Deepa Iyer,19205.61,0.5,0
+F007,Horizon Bluechip Fund,135781,Equity,Large Cap,Horizon MF,Nifty 100,1.69,2014-12-11,Arjun Patel,3004.15,0.5,0
+F008,Pinnacle Small Cap Fund,148742,Equity,Small Cap,Pinnacle MF,Nifty Smallcap 250,0.89,2020-01-28,Neha Gupta,9808.22,0.5,0
+F009,Apex Balanced Advantage,152341,Hybrid,Balanced Advantage,Apex MF,Nifty 50 Hybrid,1.02,2016-03-28,Rahul Verma,9294.99,0.5,0
+F010,Summit Gilt Fund,163209,Debt,Gilt,Summit MF,Crisil Gilt,0.27,2010-02-23,Meera Joshi,8926.92,0.5,0

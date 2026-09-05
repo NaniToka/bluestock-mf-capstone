@@ -1,0 +1,11 @@
+fund_id,alpha_ann,beta,r_squared,scheme_name,category
+F001,0.2235,-0.0572,0.0021,Bluestock Large Cap Fund,Equity
+F002,0.1924,-0.0295,0.0006,Bluestock Mid Cap Opportunities,Equity
+F003,0.138,-0.0431,0.0011,Bluestock Flexi Cap Fund,Equity
+F004,0.0329,-0.0125,0.0041,Bluestock Short Duration Debt,Debt
+F005,0.0515,0.0019,0.0001,Bluestock Liquid Fund,Debt
+F006,0.0059,-0.0019,0.0,Bluestock Hybrid Aggressive,Hybrid
+F007,0.1683,0.0093,0.0,Horizon Bluechip Fund,Equity
+F008,0.1269,0.0541,0.002,Pinnacle Small Cap Fund,Equity
+F009,-0.0035,-0.0228,0.0009,Apex Balanced Advantage,Hybrid
+F010,0.0663,0.0111,0.0033,Summit Gilt Fund,Debt
