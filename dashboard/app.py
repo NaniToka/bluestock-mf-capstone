@@ -298,8 +298,9 @@ elif page == "📈 Fund Performance":
     st.markdown("<div class='section-header'>Risk vs Return (Latest Year)</div>",
                 unsafe_allow_html=True)
     latest_yr  = perf_df["year"].max()
+    # perf_df already has 'category' — only bring scheme_name and amc from funds
     perf_plot  = (perf_df[perf_df["year"] == latest_yr]
-                  .merge(funds[["fund_id","scheme_name","amc","category"]], on="fund_id")
+                  .merge(funds[["fund_id","scheme_name","amc"]], on="fund_id")
                   .merge(aum_df[aum_df["month"] == aum_df["month"].max()][["fund_id","aum_cr"]],
                          on="fund_id", how="left"))
     perf_plot  = perf_plot[perf_plot["fund_id"].isin(filt_ids)]
@@ -556,12 +557,13 @@ elif page == "📅 SIP & Market Trends":
     sip_monthly.columns = ["month", "sip_cr"]
     sip_monthly["month_dt"] = pd.to_datetime(sip_monthly["month"] + "-01")
     sip_monthly = sip_monthly.sort_values("month_dt")
+
+    nifty_monthly = (bm_df[bm_df["benchmark"] == "Nifty 100"]
                      .assign(month=lambda d: d["date"].dt.to_period("M").astype(str))
                      .groupby("month")["index_value"].last().reset_index())
     nifty_monthly["month_dt"] = pd.to_datetime(nifty_monthly["month"] + "-01")
     nifty_monthly = nifty_monthly.sort_values("month_dt")
 
-    # sip_monthly uses column name "month", nifty_monthly also uses "month"
     merged = sip_monthly.merge(nifty_monthly[["month", "index_value"]], on="month", how="inner")
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -578,8 +580,10 @@ elif page == "📅 SIP & Market Trends":
         hovertemplate="%{x|%b %Y}<br>Nifty 100: %{y:,.0f}<extra></extra>",
     ), secondary_y=True)
 
-    # Dec-2025 milestone
-    fig.add_vline(x="2025-12-01", line_dash="dot", line_color=AMBER,
+    # Dec-2025 milestone — use numeric timestamp for datetime x-axis
+    import pandas as _pd
+    milestone_x = _pd.Timestamp("2025-12-01").timestamp() * 1000
+    fig.add_vline(x=milestone_x, line_dash="dot", line_color=AMBER,
                   annotation_text="Dec '25 Milestone", annotation_font_color=AMBER,
                   annotation_position="top right")
 
@@ -587,8 +591,8 @@ elif page == "📅 SIP & Market Trends":
         **PLOTLY_LAYOUT, height=420,
         title=dict(text="Monthly SIP Inflows vs Nifty 100 (2022–2026)",
                    font=dict(size=13, color=NAVY)),
-        legend=dict(x=0.01, y=0.99),
     )
+    fig.update_layout(legend=dict(x=0.01, y=0.99))
     fig.update_yaxes(title_text="SIP Inflow (₹ Cr)", secondary_y=False)
     fig.update_yaxes(title_text="Nifty 100 Index", secondary_y=True)
     st.plotly_chart(fig, use_container_width=True)
@@ -671,8 +675,8 @@ elif page == "📅 SIP & Market Trends":
             title=dict(text="Active SIP Book by Start Year", font=dict(size=13, color=NAVY)),
             yaxis=dict(title="₹ Crore"),
             yaxis2=dict(title="SIP Count", overlaying="y", side="right"),
-            legend=dict(x=0.01, y=0.99),
         )
+        fig4.update_layout(legend=dict(x=0.01, y=0.99))
         st.plotly_chart(fig4, use_container_width=True)
 
     # ── Rolling SIP momentum ──────────────────────────────────────────────────
